@@ -1,0 +1,162 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum role {
+  member
+  admin
+}
+
+enum payment_method {
+  venmo
+  zelle
+  paypal
+}
+
+enum category {
+  food
+  drinks
+  hardware
+  lights
+  other
+}
+
+enum status {
+  submitted
+  approved
+  paid
+  rejected
+  needs_review
+}
+
+enum paid_via {
+  venmo
+  zelle
+  paypal
+  cash
+}
+
+model organizations {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  invite_codes invite_codes[]
+  profiles     profiles[]
+  receipts     receipts[]
+  jobs         jobs[]
+}
+
+model invite_codes {
+  code       String   @id
+  org_id     String   @db.Uuid
+  role       role
+  max_uses   Int
+  uses       Int      @default(0)
+  expires_at DateTime?
+  created_at DateTime @default(now())
+
+  organization organizations @relation(fields: [org_id], references: [id])
+
+  @@index([org_id])
+}
+
+model users {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  password_hash String
+  created_at    DateTime @default(now())
+
+  profile  profiles?
+  receipts receipts[]
+  edits    receipt_edits[] @relation("ReceiptEditUser")
+}
+
+model profiles {
+  id             String         @id @default(uuid()) @db.Uuid
+  user_id        String         @unique @db.Uuid
+  org_id         String         @db.Uuid
+  first_name     String
+  last_name      String
+  phone          String?
+  payment_method payment_method
+  payment_handle String?
+  role           role
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  user         users          @relation(fields: [user_id], references: [id])
+  organization organizations  @relation(fields: [org_id], references: [id])
+
+  @@index([org_id])
+}
+
+model receipts {
+  id                       String    @id @default(uuid()) @db.Uuid
+  org_id                   String    @db.Uuid
+  user_id                  String    @db.Uuid
+  description              String
+  amount_cents             Int
+  category                 category
+  status                   status    @default(submitted)
+  photo_key                String
+  ai_extracted_total_cents Int?
+  ai_match                 Boolean?
+  paid_at                  DateTime?
+  paid_via                 paid_via?
+  paid_note                String?
+  created_at               DateTime  @default(now())
+  updated_at               DateTime  @updatedAt
+
+  organization organizations @relation(fields: [org_id], references: [id])
+  user         users         @relation(fields: [user_id], references: [id])
+  edits        receipt_edits[]
+
+  @@index([org_id])
+  @@index([user_id])
+  @@index([status])
+  @@index([created_at])
+}
+
+model receipt_edits {
+  id             String   @id @default(uuid()) @db.Uuid
+  receipt_id     String   @db.Uuid
+  editor_user_id String   @db.Uuid
+  field_name     String
+  old_value      String
+  new_value      String
+  edited_at      DateTime @default(now())
+
+  receipt receipts @relation(fields: [receipt_id], references: [id])
+  editor  users    @relation("ReceiptEditUser", fields: [editor_user_id], references: [id])
+
+  @@index([receipt_id])
+  @@index([editor_user_id])
+}
+
+model jobs {
+  id          String   @id @default(uuid()) @db.Uuid
+  org_id      String?  @db.Uuid
+  type        String
+  payload_json Json
+  attempts    Int      @default(0)
+  last_error  String?
+  next_run_at DateTime?
+  created_at  DateTime @default(now())
+
+  organization organizations? @relation(fields: [org_id], references: [id])
+
+  @@index([org_id])
+  @@index([type])
+}
