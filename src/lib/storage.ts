@@ -1,13 +1,17 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 
-const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: {
-    persistSession: false,
-  },
-});
+let _supabase: SupabaseClient | null = null;
+const getSupabase = () => {
+  if (!_supabase) {
+    _supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
+  }
+  return _supabase;
+};
 
-const bucket = env.SUPABASE_STORAGE_BUCKET;
+const getBucket = () => env.SUPABASE_STORAGE_BUCKET;
 
 const extensionForContentType = (contentType: string) => {
   if (contentType === "image/jpeg") return "jpg";
@@ -22,8 +26,8 @@ export const storageService = {
   async createSignedUploadUrl(orgId: string, receiptId: string, contentType: string) {
     const ext = extensionForContentType(contentType);
     const key = `${orgId}/${receiptId}.${ext}`;
-    const { data, error } = await supabase.storage
-      .from(bucket)
+    const { data, error } = await getSupabase().storage
+      .from(getBucket())
       .createSignedUploadUrl(key);
 
     if (error || !data?.signedUrl) {
@@ -39,8 +43,8 @@ export const storageService = {
       throw new Error("Unauthorized");
     }
 
-    const { data, error } = await supabase.storage
-      .from(bucket)
+    const { data, error } = await getSupabase().storage
+      .from(getBucket())
       .createSignedUrl(key, 60 * 10);
 
     if (error || !data?.signedUrl) {
@@ -53,8 +57,8 @@ export const storageService = {
   async createOrgLogoUploadUrl(orgId: string, contentType: string) {
     const ext = extensionForContentType(contentType);
     const key = `logo-${orgId}.${ext}`;
-    const { data, error } = await supabase.storage
-      .from(bucket)
+    const { data, error } = await getSupabase().storage
+      .from(getBucket())
       .createSignedUploadUrl(key);
 
     if (error || !data?.signedUrl) {
