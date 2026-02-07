@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type InviteStatus = "idle" | "checking" | "valid" | "invalid";
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialCode = searchParams.get("code") ?? "";
@@ -210,5 +210,18 @@ export default function SignupPage() {
         </form>
       ) : null}
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 py-10">
+        <h1 className="text-2xl font-semibold">Create your account</h1>
+        <p className="mt-2 text-sm text-neutral-600">Loading...</p>
+      </main>
+    }>
+      <SignupForm />
+    </Suspense>
   );
 }

@@ -34,7 +34,8 @@ export const storageService = {
   },
 
   async createSignedViewUrl(orgId: string, key: string) {
-    if (!key.startsWith(`${orgId}/`)) {
+    const validPrefix = key.startsWith(`${orgId}/`) || key.startsWith(`logo-${orgId}`);
+    if (!validPrefix) {
       throw new Error("Unauthorized");
     }
 
@@ -47,5 +48,19 @@ export const storageService = {
     }
 
     return data.signedUrl;
+  },
+
+  async createOrgLogoUploadUrl(orgId: string, contentType: string) {
+    const ext = extensionForContentType(contentType);
+    const key = `logo-${orgId}.${ext}`;
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUploadUrl(key);
+
+    if (error || !data?.signedUrl) {
+      throw new Error("Failed to create upload URL.");
+    }
+
+    return { key, signedUrl: data.signedUrl };
   },
 };

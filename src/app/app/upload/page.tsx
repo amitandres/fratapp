@@ -1,26 +1,68 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 
-const categories = ["food", "drinks", "hardware", "lights", "other"] as const;
+const categories = [
+  { value: "food", label: "Food" },
+  { value: "drinks", label: "Drinks" },
+  { value: "hardware", label: "Hardware" },
+  { value: "lights", label: "Lights" },
+  { value: "other", label: "Other" },
+];
+
+function formatAmount(val: string): string {
+  const num = parseFloat(val.replace(/[^0-9.]/g, ""));
+  if (isNaN(num)) return "";
+  return num.toFixed(2);
+}
+
+function parseAmount(val: string): number {
+  return parseFloat(val) || 0;
+}
 
 export default function UploadReceiptPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<(typeof categories)[number]>("food");
+  const [amountRaw, setAmountRaw] = useState("");
+  const [category, setCategory] = useState("food");
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    if (!file) {
-      setError("Please upload a receipt photo.");
-      return;
+  const amount = parseAmount(amountRaw);
+  const isValid =
+    description.trim().length > 0 &&
+    amount > 0 &&
+    file !== null;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    if (f) {
+      setFile(f);
+      setPreviewUrl(URL.createObjectURL(f));
+    } else {
+      setFile(null);
+      setPreviewUrl(null);
     }
+  };
+
+  const handleAmountBlur = () => {
+    if (amountRaw) setAmountRaw(formatAmount(amountRaw));
+  };
+
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    if (!file || !isValid) return;
 
     setIsSubmitting(true);
     try {
@@ -29,7 +71,6 @@ export default function UploadReceiptPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contentType: file.type }),
       });
-
       const uploadPayload = await uploadResponse.json();
       if (!uploadResponse.ok) {
         setError(uploadPayload.error ?? "Failed to start upload.");
@@ -38,12 +79,9 @@ export default function UploadReceiptPage() {
 
       const uploadResult = await fetch(uploadPayload.signedUrl, {
         method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
+        headers: { "Content-Type": file.type },
         body: file,
       });
-
       if (!uploadResult.ok) {
         setError("Upload failed. Please try again.");
         return;
@@ -54,8 +92,8 @@ export default function UploadReceiptPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           receiptId: uploadPayload.receiptId,
-          description,
-          amount,
+          description: description.trim(),
+          amount: amount.toFixed(2),
           category,
           photoKey: uploadPayload.key,
         }),
@@ -67,86 +105,110 @@ export default function UploadReceiptPage() {
         return;
       }
 
-      router.push("/app/receipts");
-      router.refresh();
+      setSuccess(true);
+      setTimeout(() => {
+        router.push("/app/receipts");
+        router.refresh();
+      }, 1500);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (success) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="mb-4 text-5xl">✓</div>
+        <h2 className="text-xl font-semibold text-neutral-900">Receipt submitted</h2>
+        <p className="mt-1 text-sm text-neutral-600">Redirecting to Receipts...</p>
+      </div>
+    );
+  }
+
   return (
-    <main className="mx-auto flex w-full max-w-md flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Upload receipt</h1>
-        <p className="mt-1 text-sm text-neutral-600">
+        <h1 className="text-xl font-semibold text-neutral-900">Upload receipt</h1>
+        <p className="mt-0.5 text-sm text-neutral-600">
           Add a receipt for reimbursement.
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-2 text-sm font-medium">
-          Amount
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            className="rounded-md border border-neutral-200 px-3 py-2 text-base"
-            required
-          />
-        </label>
+      <form onSubmit={onSubmit} className="flex flex-col gap-5">
+        <Card>
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-sm font-medium text-neutral-700">
+                Receipt photo
+              </p>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50 py-8 text-center transition-colors hover:border-neutral-300 hover:bg-neutral-100"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                {previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt="Preview"
+                    className="max-h-40 max-w-full rounded-lg object-contain"
+                  />
+                ) : (
+                  <>
+                    <span className="text-3xl">📷</span>
+                    <p className="mt-2 text-sm text-neutral-600">
+                      Tap to take a photo or choose from gallery
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
 
-        <label className="flex flex-col gap-2 text-sm font-medium">
-          Description
-          <input
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            className="rounded-md border border-neutral-200 px-3 py-2 text-base"
-            required
-          />
-        </label>
+            <Input
+              label="Amount ($)"
+              type="text"
+              inputMode="decimal"
+              value={amountRaw}
+              onChange={(e) => setAmountRaw(e.target.value)}
+              onBlur={handleAmountBlur}
+              placeholder="0.00"
+              required
+            />
+            <Input
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What was this for?"
+              required
+            />
+            <Select
+              label="Category"
+              options={categories}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
+          </div>
+        </Card>
 
-        <label className="flex flex-col gap-2 text-sm font-medium">
-          Category
-          <select
-            value={category}
-            onChange={(event) =>
-              setCategory(event.target.value as (typeof categories)[number])
-            }
-            className="rounded-md border border-neutral-200 px-3 py-2 text-base"
-          >
-            {categories.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
+        {error && (
+          <p className="text-sm text-red-600">{error}</p>
+        )}
 
-        <label className="flex flex-col gap-2 text-sm font-medium">
-          Receipt photo
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            className="rounded-md border border-neutral-200 px-3 py-2 text-base"
-            required
-          />
-        </label>
-
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
-
-        <button
+        <Button
           type="submit"
-          disabled={isSubmitting}
-          className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          fullWidth
+          size="lg"
+          disabled={!isValid || isSubmitting}
         >
-          {isSubmitting ? "Uploading..." : "Submit receipt"}
-        </button>
+          {isSubmitting ? "Submitting..." : "Submit receipt"}
+        </Button>
       </form>
-    </main>
+    </div>
   );
 }
