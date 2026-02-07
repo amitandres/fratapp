@@ -6,9 +6,18 @@ const requiredEnv = (key: string) => {
   return value;
 };
 
+// Lazy validation: throw only when value is first accessed (runtime), not at module load (build)
 export const env = {
-  SESSION_SECRET: requiredEnv("SESSION_SECRET"),
-  SUPABASE_URL: requiredEnv("SUPABASE_URL"),
-  SUPABASE_SERVICE_ROLE_KEY: requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
-  SUPABASE_STORAGE_BUCKET: requiredEnv("SUPABASE_STORAGE_BUCKET"),
+  get SESSION_SECRET() {
+    return requiredEnv("SESSION_SECRET");
+  },
+  get SUPABASE_URL() {
+    return requiredEnv("SUPABASE_URL");
+  },
+  get SUPABASE_SERVICE_ROLE_KEY() {
+    return requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+  },
+  get SUPABASE_STORAGE_BUCKET() {
+    return requiredEnv("SUPABASE_STORAGE_BUCKET");
+  },
 };
