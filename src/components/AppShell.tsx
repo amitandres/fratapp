@@ -8,7 +8,7 @@ const navItems = [
   { href: "/app/upload", label: "Upload", icon: "📤" },
   { href: "/app/receipts", label: "Receipts", icon: "🧾" },
   { href: "/app/admin", label: "Admin", icon: "⚙️", adminOnly: true },
-  { href: "/app/admin/org", label: "Org", icon: "🏛️", adminOnly: true, desktopOnly: true },
+  { href: "/app/notifications", label: "Notifications", icon: "🔔" },
   { href: "/app/settings", label: "Settings", icon: "👤" },
 ];
 
@@ -17,14 +17,19 @@ export function AppShell({
   orgName,
   role,
   isAdmin,
+  unreadNotifications = 0,
 }: {
   children: React.ReactNode;
   orgName: string;
   role?: string;
   isAdmin?: boolean;
+  unreadNotifications?: number;
 }) {
   const pathname = usePathname();
-  const visibleItems = navItems.filter((i) => !i.adminOnly || isAdmin);
+  const visibleItems = navItems.filter((i) => {
+    if (i.adminOnly) return isAdmin;
+    return true;
+  });
   const mobileItems = visibleItems.filter((i) => !(i as { desktopOnly?: boolean }).desktopOnly);
   const desktopItems = visibleItems;
 
@@ -39,11 +44,25 @@ export function AppShell({
             </h1>
             <p className="text-xs text-neutral-500">{role ?? "member"}</p>
           </div>
-          <form action="/api/auth/logout" method="POST">
+          <div className="flex items-center gap-3">
+            <a
+              href="/app/notifications"
+              className="relative rounded-full p-1.5 text-neutral-600 hover:bg-neutral-100 hover:text-black"
+              aria-label={`Notifications${unreadNotifications ? ` (${unreadNotifications} unread)` : ""}`}
+            >
+              <span className="text-xl">🔔</span>
+              {unreadNotifications > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </span>
+              )}
+            </a>
+            <form action="/api/auth/logout" method="POST">
             <Button type="submit" variant="ghost" size="sm">
               Log out
             </Button>
           </form>
+          </div>
         </div>
         <nav className="mx-auto flex max-w-3xl gap-1 border-t border-neutral-100 px-4 py-2">
           {desktopItems.map((item) => (

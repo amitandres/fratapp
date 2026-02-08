@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { storageService } from "@/lib/storage";
-import { requireRole } from "@/lib/auth";
+import { requireExecRole } from "@/lib/auth";
 
 const schema = z.object({
   contentType: z.string().min(3),
 });
 
 export async function POST(request: Request) {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
   const body = await request.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

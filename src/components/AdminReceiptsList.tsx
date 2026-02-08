@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/Drawer";
 import { QuickActions } from "@/components/QuickActions";
+import { AuditTimeline } from "@/components/AuditTimeline";
+import { Input } from "@/components/ui/Input";
 
 type Receipt = {
   id: string;
@@ -23,15 +26,111 @@ type Receipt = {
   };
 };
 
-const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const formatCurrency = (cents: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 
 export function AdminReceiptsList({
   receipts,
 }: {
   receipts: Receipt[];
 }) {
+  const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<"approve" | "paid" | "reject" | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const selected = receipts.find((r) => r.id === selectedId);
+
+  const toggleCheck = (id: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (checkedIds.size === receipts.length) setCheckedIds(new Set());
+    else setCheckedIds(new Set(receipts.map((r) => r.id)));
+  };
+
+  const runBulkApprove = async () => {
+    if (checkedIds.size === 0) return;
+    if (!confirm(`Approve ${checkedIds.size} receipt(s)?`)) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/receipts/bulk-approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiptIds: Array.from(checkedIds) }),
+      });
+      if (res.ok) {
+        setCheckedIds(new Set());
+        setBulkAction(null);
+        router.refresh();
+      } else {
+        const d = await res.json();
+        alert(d.error ?? "Failed");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const runBulkPaid = async () => {
+    if (checkedIds.size === 0) return;
+    if (!confirm(`Mark ${checkedIds.size} receipt(s) as paid?`)) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/receipts/bulk-paid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiptIds: Array.from(checkedIds) }),
+      });
+      if (res.ok) {
+        setCheckedIds(new Set());
+        setBulkAction(null);
+        router.refresh();
+      } else {
+        const d = await res.json();
+        alert(d.error ?? "Failed");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const runBulkReject = async () => {
+    if (checkedIds.size === 0 || !rejectReason.trim() || rejectReason.trim().length < 3) return;
+    if (!confirm(`Reject ${checkedIds.size} receipt(s) with this reason?`)) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/receipts/bulk-reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiptIds: Array.from(checkedIds), reason: rejectReason.trim() }),
+      });
+      if (res.ok) {
+        setCheckedIds(new Set());
+        setBulkAction(null);
+        setRejectReason("");
+        router.refresh();
+      } else {
+        const d = await res.json();
+        alert(d.error ?? "Failed");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const submittedIds = receipts.filter((r) => r.status === "submitted").map((r) => r.id);
+  const approvedIds = receipts.filter((r) => r.status === "approved").map((r) => r.id);
+  const canBulkApprove = checkedIds.size > 0 && Array.from(checkedIds).every((id) => submittedIds.includes(id));
+  const canBulkPaid = checkedIds.size > 0 && Array.from(checkedIds).every((id) => approvedIds.includes(id));
+  const canBulkReject = checkedIds.size > 0 && Array.from(checkedIds).every((id) => submittedIds.includes(id));
 
   const openPhoto = async (key: string) => {
     const res = await fetch(`/api/storage/view-url?key=${encodeURIComponent(key)}`);
@@ -41,7 +140,21 @@ export function AdminReceiptsList({
 
   return (
     <>
-      <div className="flex flex-col gap-3">
+      {receipts.length > 0 && (
+        <div
+          className="mb-3 flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={checkedIds.size === receipts.length && receipts.length > 0}
+            onChange={toggleAll}
+            className="h-4 w-4 rounded border-neutral-300"
+          />
+          <span className="text-sm text-neutral-600">Select all on page</span>
+        </div>
+      )}
+      <div className="flex flex-col gap-3 pb-24 md:pb-0">
         {receipts.map((receipt) => {
           const submitterName =
             receipt.user.profile?.first_name && receipt.user.profile?.last_name
@@ -51,10 +164,28 @@ export function AdminReceiptsList({
           return (
             <Card
               key={receipt.id}
-              className="cursor-pointer transition-shadow hover:shadow-md"
+              className="flex cursor-pointer transition-shadow hover:shadow-md"
               padding="md"
               onClick={() => setSelectedId(receipt.id)}
             >
+              <div
+                className="flex shrink-0 items-start pt-0.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {(receipt.status === "submitted" || receipt.status === "approved") && (
+                  <input
+                    type="checkbox"
+                    checked={checkedIds.has(receipt.id)}
+                    onChange={() => toggleCheck(receipt.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 rounded border-neutral-300"
+                  />
+                )}
+                {receipt.status !== "submitted" && receipt.status !== "approved" && (
+                  <span className="w-4" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1 pl-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-neutral-900 truncate">
@@ -80,23 +211,105 @@ export function AdminReceiptsList({
                 </div>
               </div>
 
-              <div
-                className="mt-3 flex flex-wrap gap-2"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => openPhoto(receipt.photo_key)}
+                <div
+                  className="mt-3 flex flex-wrap gap-2"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  View photo
-                </Button>
-                <QuickActions receipt={receipt} />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => openPhoto(receipt.photo_key)}
+                  >
+                    View photo
+                  </Button>
+                  <QuickActions receipt={receipt} onRejectSuccess={() => router.refresh()} />
+                </div>
               </div>
             </Card>
           );
         })}
       </div>
+
+      {checkedIds.size > 0 && (
+        <div className="fixed bottom-16 left-0 right-0 z-30 flex items-center justify-between gap-3 border-t border-neutral-200 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-lg md:bottom-0 md:pb-4">
+          <span className="text-sm font-medium text-neutral-700">
+            {checkedIds.size} selected
+          </span>
+          <div className="flex gap-2">
+            {canBulkApprove && (
+              <Button
+                size="sm"
+                onClick={runBulkApprove}
+                disabled={isSubmitting}
+              >
+                Approve
+              </Button>
+            )}
+            {canBulkPaid && (
+              <Button
+                size="sm"
+                onClick={runBulkPaid}
+                disabled={isSubmitting}
+              >
+                Mark paid
+              </Button>
+            )}
+            {canBulkReject && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setBulkAction("reject")}
+                disabled={isSubmitting}
+              >
+                Reject
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {bulkAction === "reject" && (
+        <Drawer
+          open
+          onClose={() => {
+            setBulkAction(null);
+            setRejectReason("");
+          }}
+          title="Reject receipts"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-neutral-600">
+              Reject {checkedIds.size} receipt(s). Reason is required (min 3 characters).
+            </p>
+            <Input
+              label="Reason"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Missing vendor name"
+              minLength={3}
+            />
+            <div className="flex gap-2">
+              <Button
+                fullWidth
+                onClick={runBulkReject}
+                disabled={rejectReason.trim().length < 3 || isSubmitting}
+              >
+                {isSubmitting ? "Rejecting..." : "Reject"}
+              </Button>
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => {
+                  setBulkAction(null);
+                  setRejectReason("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Drawer>
+      )}
 
       <Drawer
         open={!!selected}
@@ -107,6 +320,7 @@ export function AdminReceiptsList({
           <AdminReceiptDrawer
             receipt={selected}
             onViewPhoto={() => openPhoto(selected.photo_key)}
+            onSuccess={() => router.refresh()}
           />
         )}
       </Drawer>
@@ -117,9 +331,11 @@ export function AdminReceiptsList({
 function AdminReceiptDrawer({
   receipt,
   onViewPhoto,
+  onSuccess,
 }: {
   receipt: Receipt;
   onViewPhoto: () => void;
+  onSuccess?: () => void;
 }) {
   const submitterName =
     receipt.user.profile?.first_name && receipt.user.profile?.last_name
@@ -144,8 +360,10 @@ function AdminReceiptDrawer({
         View receipt photo
       </Button>
       <div className="pt-2">
-        <QuickActions receipt={receipt} />
+        <QuickActions receipt={receipt} onRejectSuccess={onSuccess} />
       </div>
+
+      <AuditTimeline receiptId={receipt.id} />
 
       <details className="rounded-lg border border-neutral-200">
         <summary className="cursor-pointer px-3 py-2 text-sm font-medium">

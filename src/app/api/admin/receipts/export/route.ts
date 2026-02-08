@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireAdminRole } from "@/lib/auth";
 
 const exportSchema = z.object({
   status: z
@@ -19,7 +19,7 @@ const toDateOrNull = (value?: string | null) => {
 };
 
 export async function GET(request: Request) {
-  const session = await requireRole("admin");
+  const session = await requireAdminRole();
   const { searchParams } = new URL(request.url);
   const parsed = exportSchema.safeParse({
     status: searchParams.get("status"),

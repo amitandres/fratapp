@@ -38,7 +38,7 @@ export function OrgSettings({
 }) {
   const [name, setName] = useState(org.name);
   const [nameSaving, setNameSaving] = useState(false);
-  const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
+  const [inviteRole, setInviteRole] = useState<"member" | "treasurer" | "exec" | "admin">("member");
   const [inviteMaxUses, setInviteMaxUses] = useState(50);
   const [inviteCreating, setInviteCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +98,7 @@ export function OrgSettings({
     window.location.reload();
   };
 
-  const updateMemberRole = async (userId: string, role: "admin" | "member") => {
+  const updateMemberRole = async (userId: string, role: "member" | "treasurer" | "exec" | "admin") => {
     await fetch(`/api/org/members/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -151,11 +151,13 @@ export function OrgSettings({
           <Select
             options={[
               { value: "member", label: "Member" },
+              { value: "treasurer", label: "Treasurer" },
+              { value: "exec", label: "Exec" },
               { value: "admin", label: "Admin" },
             ]}
             value={inviteRole}
-            onChange={(e) => setInviteRole(e.target.value as "admin" | "member")}
-            className="w-28"
+            onChange={(e) => setInviteRole(e.target.value as "member" | "treasurer" | "exec" | "admin")}
+            className="w-32"
           />
           <input
             type="number"
@@ -242,23 +244,21 @@ export function OrgSettings({
                     {m.role} · {formatCurrency(m.totalAmountCents)} submitted
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  {m.role === "member" ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => updateMemberRole(m.user.id, "admin")}
-                    >
-                      Promote to admin
-                    </Button>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {isSelf ? (
+                    <span className="text-sm text-neutral-600 capitalize">{m.role}</span>
                   ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => updateMemberRole(m.user.id, "member")}
-                    >
-                      Demote to member
-                    </Button>
+                    <Select
+                      options={[
+                        { value: "member", label: "Member" },
+                        { value: "treasurer", label: "Treasurer" },
+                        { value: "exec", label: "Exec" },
+                        { value: "admin", label: "Admin" },
+                      ]}
+                      value={m.role}
+                      onChange={(e) => updateMemberRole(m.user.id, e.target.value as "member" | "treasurer" | "exec" | "admin")}
+                      className="w-28"
+                    />
                   )}
                   {!isSelf && (
                     <Button

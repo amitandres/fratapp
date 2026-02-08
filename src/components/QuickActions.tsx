@@ -12,10 +12,41 @@ type Receipt = {
   paid_note: string | null;
 };
 
-export function QuickActions({ receipt }: { receipt: Receipt }) {
+export function QuickActions({
+  receipt,
+  onRejectSuccess,
+}: {
+  receipt: Receipt;
+  onRejectSuccess?: () => void;
+}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleAction = async (action: string) => {
+    if (action === "rejected") {
+      const reason = window.prompt("Rejection reason (required, min 3 characters):");
+      if (!reason || reason.trim().length < 3) {
+        if (reason !== null) alert("Reason must be at least 3 characters.");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        const res = await fetch("/api/admin/receipts/reject", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ receiptId: receipt.id, reason: reason.trim() }),
+        });
+        if (res.ok) {
+          (onRejectSuccess ?? (() => window.location.reload()))();
+        } else {
+          const d = await res.json();
+          alert(d.error ?? "Failed to reject");
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const formData = new FormData();
@@ -32,11 +63,11 @@ export function QuickActions({ receipt }: { receipt: Receipt }) {
       });
 
       if (response.ok) {
-        window.location.reload();
+        (onRejectSuccess ?? (() => window.location.reload()))();
       } else {
         alert("Failed to update receipt");
       }
-    } catch (error) {
+    } catch {
       alert("Error updating receipt");
     } finally {
       setIsSubmitting(false);

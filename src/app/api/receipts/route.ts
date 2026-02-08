@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUserAndProfile } from "@/lib/auth";
+import { createAuditLog } from "@/lib/audit";
+import { canViewAllReceipts } from "@/lib/permissions";
 
 const createReceiptSchema = z.object({
   receiptId: z.string().uuid(),
@@ -55,6 +57,15 @@ export async function POST(request: Request) {
     },
   });
 
+  await createAuditLog(prisma, {
+    orgId: session.orgId,
+    actorUserId: session.userId,
+    entityType: "RECEIPT",
+    entityId: receipt.id,
+    action: "RECEIPT_SUBMITTED",
+    metadata: { amountCents: receipt.amount_cents, description: receipt.description },
+  });
+
   return NextResponse.json({ ok: true, receiptId: receipt.id });
 }
 
@@ -64,7 +75,7 @@ export async function GET() {
   const receipts = await prisma.receipts.findMany({
     where: {
       org_id: session.orgId,
-      ...(session.role === "member" ? { user_id: session.userId } : {}),
+      ...(!canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin") ? { user_id: session.userId } : {}),
     },
     orderBy: { created_at: "desc" },
     select: {

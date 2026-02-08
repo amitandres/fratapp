@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireExecRole } from "@/lib/auth";
 
-const ROLES = ["admin", "member"] as const;
+const ROLES = ["member", "treasurer", "exec", "admin"] as const;
 
 function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -21,7 +21,7 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
 
   const codes = await prisma.invite_codes.findMany({
     where: { org_id: session.orgId },
@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
   const body = await request.json();
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {

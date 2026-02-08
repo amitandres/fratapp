@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireAdminRole } from "@/lib/auth";
+import { createAuditLog } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
 const updateSchema = z.object({
   receiptId: z.string().uuid(),
@@ -11,10 +13,11 @@ const updateSchema = z.object({
   category: z.enum(["food", "drinks", "hardware", "lights", "other"]),
   paidVia: z.enum(["venmo", "zelle", "paypal", "cash"]).optional().or(z.literal("")),
   paidNote: z.string().optional(),
+  rejectionReason: z.string().min(3).max(500).optional().or(z.literal("")),
 });
 
 export async function POST(request: Request) {
-  const session = await requireRole("admin");
+  const session = await requireAdminRole();
   const body = await request.formData();
   const parsed = updateSchema.safeParse({
     receiptId: body.get("receiptId"),
@@ -24,6 +27,7 @@ export async function POST(request: Request) {
     category: body.get("category"),
     paidVia: body.get("paidVia"),
     paidNote: body.get("paidNote") ?? undefined,
+    rejectionReason: body.get("rejectionReason") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -50,8 +54,12 @@ export async function POST(request: Request) {
   const paidVia = parsed.data.paidVia === "" ? null : parsed.data.paidVia ?? null;
   const paidAt =
     parsed.data.status === "paid" ? receipt.paid_at ?? new Date() : null;
+  const rejectionReason =
+    parsed.data.status === "rejected" && parsed.data.rejectionReason?.trim()
+      ? parsed.data.rejectionReason.trim()
+      : null;
 
-  const updates = {
+  const updates: Record<string, unknown> = {
     status: parsed.data.status,
     amount_cents: amountCents,
     description: parsed.data.description,
@@ -60,11 +68,59 @@ export async function POST(request: Request) {
     paid_note: parsed.data.paidNote ?? null,
     paid_at: paidAt,
   };
+  if (parsed.data.status === "rejected") {
+    updates.rejection_reason = rejectionReason;
+    updates.rejected_at = new Date();
+    updates.rejected_by_user_id = session.userId;
+  }
 
   await prisma.receipts.update({
     where: { id: receipt.id },
-    data: updates,
+    data: updates as Parameters<typeof prisma.receipts.update>[0]["data"],
   });
+
+  if (receipt.status !== parsed.data.status) {
+    const action =
+      parsed.data.status === "approved"
+        ? "RECEIPT_APPROVED"
+        : parsed.data.status === "paid"
+          ? "RECEIPT_PAID"
+          : parsed.data.status === "rejected"
+            ? "RECEIPT_REJECTED"
+            : "RECEIPT_UPDATED";
+    await createAuditLog(prisma, {
+      orgId: session.orgId,
+      actorUserId: session.userId,
+      entityType: "RECEIPT",
+      entityId: receipt.id,
+      action,
+      metadata: {
+        previousStatus: receipt.status,
+        newStatus: parsed.data.status,
+        reason: rejectionReason ?? undefined,
+        amountCents,
+      },
+    });
+    if (["approved", "paid", "rejected"].includes(parsed.data.status)) {
+      const titles = {
+        approved: "Receipt approved",
+        paid: "Receipt marked paid",
+        rejected: "Receipt rejected",
+      };
+      await createNotification(prisma, {
+        orgId: session.orgId,
+        userId: receipt.user_id,
+        type: action,
+        title: titles[parsed.data.status as keyof typeof titles],
+        body:
+          parsed.data.status === "rejected" && rejectionReason
+            ? `"${parsed.data.description}" was rejected: ${rejectionReason}`
+            : `"${parsed.data.description}" ($${(amountCents / 100).toFixed(2)})`,
+        entityType: "RECEIPT",
+        entityId: receipt.id,
+      });
+    }
+  }
 
   const auditEntries = [
     receipt.status !== updates.status
@@ -89,11 +145,11 @@ export async function POST(request: Request) {
     receipt.paid_note !== updates.paid_note
       ? { field: "paid_note", old: receipt.paid_note ?? "", next: updates.paid_note ?? "" }
       : null,
-    receipt.paid_at?.toISOString() !== updates.paid_at?.toISOString()
+    receipt.paid_at?.toISOString() !== paidAt?.toISOString()
       ? {
           field: "paid_at",
           old: receipt.paid_at?.toISOString() ?? "",
-          next: updates.paid_at?.toISOString() ?? "",
+          next: paidAt?.toISOString() ?? "",
         }
       : null,
   ].filter(Boolean) as Array<{ field: string; old: string; next: string }>;

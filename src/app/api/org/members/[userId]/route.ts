@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireExecRole } from "@/lib/auth";
 
 const updateSchema = z.object({
-  role: z.enum(["admin", "member"]),
+  role: z.enum(["member", "treasurer", "exec", "admin"]),
 });
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
   const { userId } = await params;
   const body = await request.json();
   const parsed = updateSchema.safeParse(body);
@@ -30,13 +30,17 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  if (parsed.data.role === "member" && profile.role === "admin") {
-    const adminCount = await prisma.profiles.count({
-      where: { org_id: session.orgId, role: "admin" },
+  const isDemotingFromExec =
+    (profile.role === "exec" || profile.role === "admin") &&
+    parsed.data.role !== "exec" &&
+    parsed.data.role !== "admin";
+  if (isDemotingFromExec) {
+    const execCount = await prisma.profiles.count({
+      where: { org_id: session.orgId, role: { in: ["exec", "admin"] } },
     });
-    if (adminCount <= 1) {
+    if (execCount <= 1) {
       return NextResponse.json(
-        { error: "Cannot demote the last admin." },
+        { error: "Cannot demote the last exec/admin." },
         { status: 400 }
       );
     }
@@ -54,7 +58,7 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
   const { userId } = await params;
 
   const profile = await prisma.profiles.findFirst({

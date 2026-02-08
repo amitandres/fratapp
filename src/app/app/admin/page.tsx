@@ -1,15 +1,27 @@
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireAdminRole } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { AdminReceiptsList } from "@/components/AdminReceiptsList";
+import { AdminReceiptStatusTabs } from "@/components/AdminReceiptStatusTabs";
 
-export default async function AdminPage() {
-  const session = await requireRole("admin");
+const STATUS_VALUES = ["submitted", "approved", "paid", "rejected", "needs_review"] as const;
+
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }> | { status?: string };
+}) {
+  const session = await requireAdminRole();
+  const params = "then" in searchParams && typeof (searchParams as Promise<unknown>).then === "function"
+    ? await (searchParams as Promise<{ status?: string }>)
+    : (searchParams as { status?: string });
+  const statusFilter =
+    params.status && STATUS_VALUES.includes(params.status as (typeof STATUS_VALUES)[number])
+      ? (params.status as (typeof STATUS_VALUES)[number])
+      : "submitted";
 
   const receipts = await prisma.receipts.findMany({
-    where: { org_id: session.orgId },
+    where: { org_id: session.orgId, status: statusFilter },
     include: {
       user: {
         include: {
@@ -25,17 +37,22 @@ export default async function AdminPage() {
     orderBy: { created_at: "desc" },
   });
 
-  const totalAll = receipts.reduce((sum, r) => sum + r.amount_cents, 0);
-  const totalByStatus = receipts.reduce(
+  const allReceipts = await prisma.receipts.findMany({
+    where: { org_id: session.orgId },
+    select: { status: true, amount_cents: true },
+  });
+  const totalAll = allReceipts.reduce((sum, r) => sum + r.amount_cents, 0);
+  const totalByStatus = allReceipts.reduce(
     (acc, r) => {
       acc[r.status] = (acc[r.status] || 0) + r.amount_cents;
       return acc;
     },
     {} as Record<string, number>
   );
+  const outstanding = totalByStatus.approved || 0;
 
   const formatCurrency = (cents: number) =>
-    `$${(cents / 100).toFixed(2)}`;
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 
   return (
     <div className="flex flex-col gap-6">
@@ -47,19 +64,15 @@ export default async function AdminPage() {
           </p>
         </div>
         <a
-          href="/app/admin/org"
+          href="/app/settings"
           className="shrink-0 text-sm font-medium text-neutral-600 hover:text-black"
         >
-          Org settings →
+          Settings →
         </a>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Card padding="sm">
-          <p className="text-xs text-neutral-500">Total</p>
-          <p className="text-lg font-semibold">{formatCurrency(totalAll)}</p>
-        </Card>
+      {/* Stat cards: Submitted, Approved, Outstanding, Paid, Total */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Card padding="sm">
           <p className="text-xs text-neutral-500">Submitted</p>
           <p className="text-lg font-semibold">
@@ -73,56 +86,59 @@ export default async function AdminPage() {
           </p>
         </Card>
         <Card padding="sm">
+          <p className="text-xs text-neutral-500">Outstanding</p>
+          <p className="text-lg font-semibold">{formatCurrency(outstanding)}</p>
+        </Card>
+        <Card padding="sm">
           <p className="text-xs text-neutral-500">Paid</p>
           <p className="text-lg font-semibold">
             {formatCurrency(totalByStatus.paid || 0)}
           </p>
         </Card>
+        <Card padding="sm">
+          <p className="text-xs text-neutral-500">Total</p>
+          <p className="text-lg font-semibold">{formatCurrency(totalAll)}</p>
+        </Card>
       </div>
 
-      {/* Filter bar + Export */}
-      <Card padding="sm">
-        <form
-          action="/api/admin/receipts/export"
-          method="get"
-          className="flex flex-wrap items-end gap-3"
-        >
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-neutral-600">Status</label>
-            <select
-              name="status"
-              className="rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
-              defaultValue=""
-            >
-              <option value="">All</option>
-              <option value="submitted">submitted</option>
-              <option value="approved">approved</option>
-              <option value="paid">paid</option>
-              <option value="rejected">rejected</option>
-              <option value="needs_review">needs_review</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-neutral-600">From</label>
-            <input
-              type="date"
-              name="from"
-              className="rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-neutral-600">To</label>
-            <input
-              type="date"
-              name="to"
-              className="rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
-            />
-          </div>
-          <Button type="submit" variant="secondary" size="sm">
+      {/* Status tabs + Export (secondary) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <AdminReceiptStatusTabs currentStatus={statusFilter} />
+        <details className="group">
+          <summary className="cursor-pointer list-none text-sm font-medium text-neutral-600 hover:text-black">
             Export CSV
-          </Button>
-        </form>
-      </Card>
+          </summary>
+          <form
+            action="/api/admin/receipts/export"
+            method="get"
+            className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3"
+          >
+            <input type="hidden" name="status" value={statusFilter} />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-600">From</label>
+              <input
+                type="date"
+                name="from"
+                className="rounded border border-neutral-200 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-600">To</label>
+              <input
+                type="date"
+                name="to"
+                className="rounded border border-neutral-200 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <button
+              type="submit"
+              className="rounded-md bg-neutral-200 px-3 py-1.5 text-sm font-medium hover:bg-neutral-300"
+            >
+              Download
+            </button>
+          </form>
+        </details>
+      </div>
 
       {receipts.length === 0 ? (
         <Card className="flex flex-col items-center py-12 text-center">

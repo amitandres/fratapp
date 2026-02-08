@@ -8,7 +8,7 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 const getJwtSecret = () => new TextEncoder().encode(env.SESSION_SECRET);
 
-type SessionRole = "member" | "admin";
+type SessionRole = "member" | "treasurer" | "exec" | "admin";
 
 type SessionPayload = {
   sub: string;
@@ -116,6 +116,25 @@ export const requireCurrentUserAndProfile = async () => {
 export const requireRole = async (role: SessionRole) => {
   const session = await getSessionUser();
   if (!session || session.role !== role) {
+    throw new Error("Forbidden");
+  }
+  return session;
+};
+
+const ADMIN_ROLES = ["admin", "exec", "treasurer"] as const;
+const EXEC_ROLES = ["admin", "exec"] as const;
+
+export const requireAdminRole = async () => {
+  const session = await getSessionUser();
+  if (!session || !ADMIN_ROLES.includes(session.role as (typeof ADMIN_ROLES)[number])) {
+    throw new Error("Forbidden");
+  }
+  return session;
+};
+
+export const requireExecRole = async () => {
+  const session = await getSessionUser();
+  if (!session || !EXEC_ROLES.includes(session.role as (typeof EXEC_ROLES)[number])) {
     throw new Error("Forbidden");
   }
   return session;

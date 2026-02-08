@@ -1,18 +1,35 @@
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUserAndProfile } from "@/lib/auth";
+import { canViewAllReceipts } from "@/lib/permissions";
 import { Card } from "@/components/ui/Card";
 import { ReceiptsList } from "@/components/ReceiptsList";
+import { ReceiptStatusTabs } from "@/components/ReceiptStatusTabs";
 
-export default async function ReceiptsPage() {
+const STATUS_VALUES = ["submitted", "approved", "rejected", "paid", "needs_review"] as const;
+
+export default async function ReceiptsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }> | { status?: string };
+}) {
   const session = await requireCurrentUserAndProfile();
+  const params = "then" in searchParams && typeof (searchParams as Promise<unknown>).then === "function"
+    ? await (searchParams as Promise<{ status?: string }>)
+    : (searchParams as { status?: string });
+  const statusFilter =
+    params.status && STATUS_VALUES.includes(params.status as (typeof STATUS_VALUES)[number])
+      ? (params.status as (typeof STATUS_VALUES)[number])
+      : undefined;
 
   const receipts = await prisma.receipts.findMany({
     where: {
       org_id: session.orgId,
-      ...(session.role === "member" ? { user_id: session.userId } : {}),
+      ...(!canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin") ? { user_id: session.userId } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
     },
     include:
-      session.role === "admin"
+      canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin")
         ? {
             user: {
               include: {
@@ -30,7 +47,7 @@ export default async function ReceiptsPage() {
   });
 
   const memberTotals =
-    session.role === "member"
+    !canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin")
       ? receipts.reduce(
           (acc, r) => {
             acc.total += r.amount_cents;
@@ -51,13 +68,17 @@ export default async function ReceiptsPage() {
       <div>
         <h1 className="text-xl font-semibold text-neutral-900">Receipts</h1>
         <p className="mt-0.5 text-sm text-neutral-600">
-          {session.role === "admin"
+          {canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin")
             ? "All receipts in your org."
             : "Your submitted receipts."}
         </p>
       </div>
 
-      {session.role === "member" && memberTotals && receipts.length > 0 && (
+      <Suspense fallback={null}>
+        <ReceiptStatusTabs currentStatus={statusFilter ?? ""} />
+      </Suspense>
+
+      {memberTotals && receipts.length > 0 && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Card padding="sm">
             <p className="text-xs text-neutral-500">Total</p>
@@ -80,7 +101,7 @@ export default async function ReceiptsPage() {
 
       <ReceiptsList
         receipts={receipts as never[]}
-        showSubmitter={session.role === "admin"}
+        showSubmitter={canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin")}
       />
     </div>
   );

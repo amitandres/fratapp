@@ -14,10 +14,28 @@ type Receipt = {
   status: "submitted" | "approved" | "paid" | "rejected" | "needs_review";
   photo_key: string;
   created_at: Date;
+  rejection_reason?: string | null;
   user?: { profile?: { first_name: string; last_name: string }; email?: string };
 };
 
-const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const formatCurrency = (cents: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+function groupByMonth<T extends { created_at: Date }>(receipts: T[]) {
+  const groups = new Map<string, T[]>();
+  for (const r of receipts) {
+    const d = new Date(r.created_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(r);
+  }
+  return Array.from(groups.entries()).sort(([a], [b]) => b.localeCompare(a));
+}
+
+function formatMonthHeader(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
 
 export function ReceiptsList({
   receipts,
@@ -55,41 +73,55 @@ export function ReceiptsList({
           </a>
         </Card>
       ) : (
-        <div className="flex flex-col gap-3">
-          {receipts.map((receipt) => (
-            <Card
-              key={receipt.id}
-              className="cursor-pointer transition-shadow hover:shadow-md"
-              padding="md"
-              onClick={() => setSelectedId(receipt.id)}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-neutral-900 truncate">
-                    {receipt.description}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <Badge status={receipt.status} />
-                    <span className="text-xs text-neutral-500">
-                      {receipt.category}
-                    </span>
-                  </div>
-                  {showSubmitter && receipt.user?.profile && (
-                    <p className="mt-1 text-xs text-neutral-500">
-                      {receipt.user.profile.first_name} {receipt.user.profile.last_name}
-                    </p>
-                  )}
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-lg font-semibold text-neutral-900">
-                    {formatCurrency(receipt.amount_cents)}
-                  </p>
-                  <p className="text-xs text-neutral-500">
-                    {new Date(receipt.created_at).toLocaleDateString()}
-                  </p>
-                </div>
+        <div className="flex flex-col gap-4">
+          {groupByMonth(receipts).map(([monthKey, monthReceipts]) => (
+            <div key={monthKey}>
+              <p className="mb-2 text-sm font-medium text-neutral-500">
+                {formatMonthHeader(monthKey)}
+              </p>
+              <div className="flex flex-col gap-3">
+                {monthReceipts.map((receipt) => (
+                  <Card
+                    key={receipt.id}
+                    className="cursor-pointer transition-shadow hover:shadow-md"
+                    padding="md"
+                    onClick={() => setSelectedId(receipt.id)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-neutral-900 truncate">
+                          {receipt.description}
+                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <Badge status={receipt.status} />
+                          <span className="text-xs text-neutral-500">
+                            {receipt.category}
+                          </span>
+                        </div>
+                        {receipt.status === "rejected" && receipt.rejection_reason && (
+                          <p className="mt-1 text-xs text-red-600">
+                            Rejected: {receipt.rejection_reason}
+                          </p>
+                        )}
+                        {showSubmitter && receipt.user?.profile && (
+                          <p className="mt-1 text-xs text-neutral-500">
+                            {receipt.user.profile.first_name} {receipt.user.profile.last_name}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-lg font-semibold text-neutral-900">
+                          {formatCurrency(receipt.amount_cents)}
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          {new Date(receipt.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
@@ -110,6 +142,11 @@ export function ReceiptsList({
             <p className="text-sm text-neutral-600">
               {selected.category} · {new Date(selected.created_at).toLocaleDateString()}
             </p>
+            {selected.status === "rejected" && selected.rejection_reason && (
+              <p className="text-sm text-red-600">
+                Rejected: {selected.rejection_reason}
+              </p>
+            )}
             {showSubmitter && selected.user && (
               <p className="text-sm text-neutral-600">
                 Submitted by {selected.user.profile?.first_name} {selected.user.profile?.last_name} ({selected.user.email})

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireExecRole } from "@/lib/auth";
 
 export async function DELETE(request: Request) {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   if (!code) {

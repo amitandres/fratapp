@@ -14,6 +14,8 @@ datasource db {
 
 enum role {
   member
+  treasurer
+  exec
   admin
 }
 
@@ -53,10 +55,12 @@ model organizations {
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
 
-  invite_codes invite_codes[]
-  profiles     profiles[]
-  receipts     receipts[]
-  jobs         jobs[]
+  invite_codes   invite_codes[]
+  profiles       profiles[]
+  receipts       receipts[]
+  jobs           jobs[]
+  audit_logs     audit_logs[]
+  notifications  notifications[]
 }
 
 model invite_codes {
@@ -79,9 +83,10 @@ model users {
   password_hash String
   created_at    DateTime @default(now())
 
-  profile  profiles?
-  receipts receipts[]
-  edits    receipt_edits[] @relation("ReceiptEditUser")
+  profile              profiles?
+  receipts             receipts[]
+  receipts_rejected    receipts[]       @relation("ReceiptRejectedBy")
+  edits                receipt_edits[]  @relation("ReceiptEditUser")
 }
 
 model profiles {
@@ -117,12 +122,16 @@ model receipts {
   paid_at                  DateTime?
   paid_via                 paid_via?
   paid_note                String?
+  rejection_reason         String?
+  rejected_at              DateTime?
+  rejected_by_user_id      String?   @db.Uuid
   created_at               DateTime  @default(now())
   updated_at               DateTime  @updatedAt
 
   organization organizations @relation(fields: [org_id], references: [id])
-  user         users         @relation(fields: [user_id], references: [id])
-  edits        receipt_edits[]
+  user               users         @relation(fields: [user_id], references: [id])
+  rejected_by_user   users?        @relation("ReceiptRejectedBy", fields: [rejected_by_user_id], references: [id])
+  edits              receipt_edits[]
 
   @@index([org_id])
   @@index([user_id])
@@ -160,4 +169,40 @@ model jobs {
 
   @@index([org_id])
   @@index([type])
+}
+
+model audit_logs {
+  id            String   @id @default(uuid()) @db.Uuid
+  org_id        String   @db.Uuid
+  actor_user_id String   @db.Uuid
+  entity_type   String
+  entity_id     String
+  action        String
+  metadata      Json?
+  created_at    DateTime @default(now())
+
+  organization organizations @relation(fields: [org_id], references: [id])
+
+  @@index([org_id])
+  @@index([entity_type, entity_id])
+  @@index([created_at])
+}
+
+model notifications {
+  id          String    @id @default(uuid()) @db.Uuid
+  org_id      String    @db.Uuid
+  user_id     String    @db.Uuid
+  type        String
+  title       String
+  body        String?
+  entity_type String?
+  entity_id   String?
+  read_at     DateTime?
+  created_at  DateTime  @default(now())
+
+  organization organizations @relation(fields: [org_id], references: [id])
+
+  @@index([org_id])
+  @@index([user_id])
+  @@index([read_at])
 }

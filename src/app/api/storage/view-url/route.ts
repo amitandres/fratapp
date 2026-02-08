@@ -3,6 +3,7 @@ import { z } from "zod";
 import { storageService } from "@/lib/storage";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUserAndProfile } from "@/lib/auth";
+import { canViewAllReceipts } from "@/lib/permissions";
 
 const viewSchema = z.object({
   key: z.string().min(1),
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
     where: {
       photo_key: parsed.data.key,
       org_id: session.orgId,
-      ...(session.role === "member" ? { user_id: session.userId } : {}),
+      ...(!canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin") ? { user_id: session.userId } : {}),
     },
     select: {
       org_id: true,

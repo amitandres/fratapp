@@ -25,7 +25,8 @@ export async function middleware(request: NextRequest) {
     const orgId = payload.orgId as string | undefined;
     const userId = payload.sub as string | undefined;
 
-    if (pathname.startsWith("/app/admin") && role !== "admin") {
+    const adminRoles = ["admin", "exec", "treasurer"];
+    if (pathname.startsWith("/app/admin") && !adminRoles.includes(role ?? "")) {
       return NextResponse.redirect(new URL("/app", request.url));
     }
 

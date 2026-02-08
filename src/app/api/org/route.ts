@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireExecRole } from "@/lib/auth";
 
 const updateSchema = z.object({
   name: z.string().min(1).max(100).trim().optional(),
@@ -9,7 +9,7 @@ const updateSchema = z.object({
 });
 
 export async function GET() {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
 
   const org = await prisma.organizations.findUnique({
     where: { id: session.orgId },
@@ -23,7 +23,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
   const body = await request.json();
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) {

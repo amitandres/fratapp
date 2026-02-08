@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireExecRole } from "@/lib/auth";
 
 export async function GET() {
-  const session = await requireRole("admin");
+  const session = await requireExecRole();
 
   const members = await prisma.profiles.findMany({
     where: { org_id: session.orgId },
