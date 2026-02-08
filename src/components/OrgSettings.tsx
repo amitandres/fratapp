@@ -41,7 +41,19 @@ export function OrgSettings({
   const [inviteRole, setInviteRole] = useState<"member" | "treasurer" | "exec" | "admin">("member");
   const [inviteMaxUses, setInviteMaxUses] = useState(50);
   const [inviteCreating, setInviteCreating] = useState(false);
+  const [revokingCode, setRevokingCode] = useState<string | null>(null);
+  const [copiedFeedback, setCopiedFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedFeedback(label);
+      setTimeout(() => setCopiedFeedback(null), 2000);
+    } catch {
+      setError("Could not copy to clipboard.");
+    }
+  };
 
   const saveName = async () => {
     setNameSaving(true);
@@ -78,7 +90,12 @@ export function OrgSettings({
         return;
       }
       const inviteLink = `${window.location.origin}/invite?code=${data.code}`;
-      await navigator.clipboard.writeText(inviteLink);
+      try {
+        await navigator.clipboard.writeText(inviteLink);
+      } catch {
+        setError(`Invite created. Copy this link: ${inviteLink}`);
+        return;
+      }
       window.location.reload();
     } finally {
       setInviteCreating(false);
@@ -87,15 +104,26 @@ export function OrgSettings({
 
   const shareInviteLink = (code: string) => {
     const inviteLink = `${window.location.origin}/invite?code=${code}`;
-    navigator.clipboard.writeText(inviteLink);
+    copyToClipboard(inviteLink, `link-${code}`);
   };
 
   const revokeCode = async (code: string) => {
     if (!confirm("Revoke this invite code?")) return;
-    await fetch(`/api/org/invite-codes/revoke?code=${encodeURIComponent(code)}`, {
-      method: "DELETE",
-    });
-    window.location.reload();
+    setRevokingCode(code);
+    setError(null);
+    try {
+      const res = await fetch(`/api/org/invite-codes/revoke?code=${encodeURIComponent(code)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Failed to revoke.");
+        return;
+      }
+      window.location.reload();
+    } finally {
+      setRevokingCode(null);
+    }
   };
 
   const updateMemberRole = async (userId: string, role: "member" | "treasurer" | "exec" | "admin") => {
@@ -183,28 +211,29 @@ export function OrgSettings({
                   {ic.role} · {ic.uses}/{ic.max_uses} uses
                 </span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => shareInviteLink(ic.code)}
                 >
-                  Share invite link
+                  {copiedFeedback === `link-${ic.code}` ? "Copied!" : "Share invite link"}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigator.clipboard.writeText(ic.code)}
+                  onClick={() => copyToClipboard(ic.code, `code-${ic.code}`)}
                 >
-                  Copy code
+                  {copiedFeedback === `code-${ic.code}` ? "Copied!" : "Copy code"}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => revokeCode(ic.code)}
+                  disabled={revokingCode === ic.code}
                   className="text-red-600 hover:bg-red-50 hover:text-red-700"
                 >
-                  Revoke
+                  {revokingCode === ic.code ? "Revoking…" : "Revoke"}
                 </Button>
               </div>
             </div>
