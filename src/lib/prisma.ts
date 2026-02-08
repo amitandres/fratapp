@@ -7,10 +7,13 @@ const globalForPrisma = globalThis as unknown as {
   pgPool?: Pool;
 };
 
+const connectionString =
+  process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+
 const pool =
   globalForPrisma.pgPool ??
   new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString,
   });
 
 if (process.env.NODE_ENV !== "production") {
