@@ -10,6 +10,11 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"] ?? process.env["POSTGRES_URL"],
+    // Migrations need direct (unpooled) connection
+    url:
+      process.env["DATABASE_URL_UNPOOLED"] ??
+      process.env["DIRECT_URL"] ??
+      process.env["DATABASE_URL"] ??
+      process.env["POSTGRES_URL"],
   },
 });
