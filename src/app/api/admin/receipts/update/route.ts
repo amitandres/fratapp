@@ -23,10 +23,10 @@ export async function POST(request: Request) {
   const parsed = updateSchema.safeParse({
     receiptId,
     status: body.get("status"),
-    amount: body.get("amount"),
-    description: body.get("description"),
-    category: body.get("category"),
-    paidVia: body.get("paidVia"),
+    amount: body.get("amount") ?? undefined,
+    description: body.get("description") ?? undefined,
+    category: body.get("category") ?? undefined,
+    paidVia: body.get("paidVia") ?? undefined,
     paidNote: body.get("paidNote") ?? undefined,
     rejectionReason: body.get("rejectionReason") ?? undefined,
   });

@@ -1,4 +1,4 @@
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, maybeRefreshSession } from "@/lib/auth";
 import { canAccessAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/AppShell";
@@ -8,6 +8,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  await maybeRefreshSession();
   const session = await getSessionUser();
   let orgName = "FratApp";
 

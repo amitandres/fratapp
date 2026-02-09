@@ -4,7 +4,7 @@ import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 const SESSION_COOKIE_NAME = "fratapp_session";
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 const getJwtSecret = () => new TextEncoder().encode(env.SESSION_SECRET);
 
@@ -54,6 +54,36 @@ export const clearSessionCookie = async () => {
     path: "/",
     maxAge: 0,
   });
+};
+
+/** Refresh session if it has less than 7 days left. Keeps active users logged in. */
+export const maybeRefreshSession = async () => {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return;
+
+  try {
+    const { payload } = await jwtVerify<SessionPayload & { exp?: number }>(token, getJwtSecret());
+    const exp = payload.exp ?? 0;
+    const timeLeft = exp - Math.floor(Date.now() / 1000);
+    const refreshThreshold = 60 * 60 * 24 * 7; // refresh when < 7 days left
+    if (timeLeft > 0 && timeLeft < refreshThreshold) {
+      const newToken = await createSessionToken({
+        userId: payload.sub!,
+        role: payload.role,
+        orgId: payload.orgId!,
+      });
+      cookieStore.set(SESSION_COOKIE_NAME, newToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: SESSION_MAX_AGE_SECONDS,
+      });
+    }
+  } catch {
+    // Token invalid, ignore
+  }
 };
 
 export const getSessionUser = async () => {
