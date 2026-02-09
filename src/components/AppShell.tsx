@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 
 const navItems = [
   { href: "/app", label: "Home", icon: "🏠" },
-  { href: "/app/upload", label: "Upload", icon: "📤" },
+  { href: "/app/upload", label: "Upload", icon: "📤", mobileHidden: true },
   { href: "/app/receipts", label: "Receipts", icon: "🧾" },
   { href: "/app/admin", label: "Admin", icon: "⚙️", adminOnly: true },
   { href: "/app/notifications", label: "Notifications", icon: "🔔" },
@@ -30,7 +30,9 @@ export function AppShell({
     if (i.adminOnly) return isAdmin;
     return true;
   });
-  const mobileItems = visibleItems.filter((i) => !(i as { desktopOnly?: boolean }).desktopOnly);
+  const mobileItems = visibleItems.filter(
+    (i) => !(i as { desktopOnly?: boolean }).desktopOnly && !(i as { mobileHidden?: boolean }).mobileHidden
+  );
   const desktopItems = visibleItems;
 
   return (
