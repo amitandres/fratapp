@@ -3,7 +3,12 @@ import { SignJWT, jwtVerify } from "jose";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 90; // 90 days
 
 const getSecret = () => {
-  const secret = process.env.SESSION_SECRET ?? "";
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || secret.length < 16) {
+    throw new Error(
+      "SESSION_SECRET must be set and at least 16 characters. Check your Vercel/env config."
+    );
+  }
   return new TextEncoder().encode(secret);
 };
 

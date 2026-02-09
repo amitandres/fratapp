@@ -1,14 +1,17 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 type InviteStatus = "idle" | "checking" | "valid" | "invalid";
 
+/**
+ * Native form POST + server redirect for signup: same bulletproof cookie flow as login.
+ */
 function SignupForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const initialCode = searchParams.get("code") ?? "";
+  const errorFromUrl = searchParams.get("error");
 
   const [code, setCode] = useState(initialCode);
   const [status, setStatus] = useState<InviteStatus>("idle");
@@ -22,9 +25,6 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("venmo");
   const [paymentHandle, setPaymentHandle] = useState("");
-
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateCode = async (value: string) => {
     if (!value) {
@@ -67,38 +67,6 @@ function SignupForm() {
     }
   }, [initialCode]);
 
-  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubmitError(null);
-    setIsSubmitting(true);
-    try {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code,
-          firstName,
-          lastName,
-          email,
-          password,
-          paymentMethod,
-          paymentHandle: paymentHandle || undefined,
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setSubmitError(payload.error ?? "Signup failed.");
-        return;
-      }
-
-      router.push(payload.redirectUrl ?? "/app");
-      router.refresh();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 py-10">
       <h1 className="text-2xl font-semibold">Create your account</h1>
@@ -132,10 +100,17 @@ function SignupForm() {
       </div>
 
       {status === "valid" ? (
-        <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">
+        <form
+          action="/api/auth/signup"
+          method="POST"
+          className="mt-8 flex flex-col gap-4"
+        >
+          <input type="hidden" name="code" value={code} />
+
           <label className="flex flex-col gap-2 text-sm font-medium">
             First name
             <input
+              name="firstName"
               value={firstName}
               onChange={(event) => setFirstName(event.target.value)}
               className="rounded-md border border-neutral-200 px-3 py-2 text-base"
@@ -146,6 +121,7 @@ function SignupForm() {
           <label className="flex flex-col gap-2 text-sm font-medium">
             Last name
             <input
+              name="lastName"
               value={lastName}
               onChange={(event) => setLastName(event.target.value)}
               className="rounded-md border border-neutral-200 px-3 py-2 text-base"
@@ -156,6 +132,7 @@ function SignupForm() {
           <label className="flex flex-col gap-2 text-sm font-medium">
             Email
             <input
+              name="email"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -167,6 +144,7 @@ function SignupForm() {
           <label className="flex flex-col gap-2 text-sm font-medium">
             Password
             <input
+              name="password"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -179,6 +157,7 @@ function SignupForm() {
           <label className="flex flex-col gap-2 text-sm font-medium">
             Payment method
             <select
+              name="paymentMethod"
               value={paymentMethod}
               onChange={(event) => setPaymentMethod(event.target.value)}
               className="rounded-md border border-neutral-200 px-3 py-2 text-base"
@@ -192,20 +171,22 @@ function SignupForm() {
           <label className="flex flex-col gap-2 text-sm font-medium">
             Payment handle (optional)
             <input
+              name="paymentHandle"
               value={paymentHandle}
               onChange={(event) => setPaymentHandle(event.target.value)}
               className="rounded-md border border-neutral-200 px-3 py-2 text-base"
             />
           </label>
 
-          {submitError ? <p className="text-sm text-red-600">{submitError}</p> : null}
+          {errorFromUrl ? (
+            <p className="text-sm text-red-600">{errorFromUrl}</p>
+          ) : null}
 
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white"
           >
-            {isSubmitting ? "Creating account..." : "Create account"}
+            Create account
           </button>
         </form>
       ) : null}

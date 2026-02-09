@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminRole } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 import { AdminReceiptsList } from "@/components/AdminReceiptsList";
+import { ApprovedReceiptsList } from "@/components/ApprovedReceiptsList";
 import { AdminReceiptStatusTabs } from "@/components/AdminReceiptStatusTabs";
 
 const STATUS_VALUES = ["submitted", "approved", "paid", "rejected", "needs_review"] as const;
@@ -152,6 +153,8 @@ export default async function AdminPage({
             Receipts submitted by members will appear here.
           </p>
         </Card>
+      ) : statusFilter === "approved" ? (
+        <ApprovedReceiptsList receipts={receipts} />
       ) : (
         <AdminReceiptsList receipts={receipts} />
       )}

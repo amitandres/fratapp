@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   createSessionToken as createToken,
@@ -7,6 +8,15 @@ import {
 } from "@/lib/jwt";
 
 const SESSION_COOKIE_NAME = "fratapp_session";
+
+/** Lax = cookie sent when user navigates to site from external links (email, bookmark). Strict would block that. */
+const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: SESSION_MAX_AGE_SECONDS,
+};
 
 type SessionRole = "member" | "treasurer" | "exec" | "admin";
 
@@ -23,22 +33,22 @@ export const setSessionCookie = async (payload: {
 }) => {
   const token = await createSessionToken(payload);
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  });
+  cookieStore.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
+};
+
+/** Set session cookie on a specific response (e.g. redirect). Use for form-POST login flows. */
+export const setSessionCookieOnResponse = async (
+  response: NextResponse,
+  payload: { userId: string; role: SessionRole; orgId: string }
+) => {
+  const token = await createSessionToken(payload);
+  response.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
 };
 
 export const clearSessionCookie = async () => {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
+    ...SESSION_COOKIE_OPTIONS,
     maxAge: 0,
   });
 };
@@ -60,13 +70,7 @@ export const maybeRefreshSession = async () => {
         role: payload.role as SessionRole,
         orgId: payload.orgId!,
       });
-      cookieStore.set(SESSION_COOKIE_NAME, newToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: SESSION_MAX_AGE_SECONDS,
-      });
+      cookieStore.set(SESSION_COOKIE_NAME, newToken, SESSION_COOKIE_OPTIONS);
     }
   } catch {
     // Token invalid, ignore

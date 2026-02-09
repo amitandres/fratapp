@@ -75,12 +75,17 @@ export function AdminReceiptsList({
   const runBulkApprove = async () => {
     if (checkedIds.size === 0) return;
     if (!confirm(`Approve ${checkedIds.size} receipt(s)?`)) return;
+    await runBulkApproveFor(Array.from(checkedIds));
+  };
+
+  const runBulkApproveFor = async (receiptIds: string[]) => {
+    if (receiptIds.length === 0) return;
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/admin/receipts/bulk-approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ receiptIds: Array.from(checkedIds) }),
+        body: JSON.stringify({ receiptIds }),
       });
       if (res.ok) {
         setCheckedIds(new Set());
@@ -144,6 +149,7 @@ export function AdminReceiptsList({
 
   const submittedIds = receipts.filter((r) => r.status === "submitted").map((r) => r.id);
   const approvedIds = receipts.filter((r) => r.status === "approved").map((r) => r.id);
+  const allSubmitted = receipts.length > 0 && receipts.every((r) => r.status === "submitted");
   const canBulkApprove = checkedIds.size > 0 && Array.from(checkedIds).every((id) => submittedIds.includes(id));
   const canBulkPaid = checkedIds.size > 0 && Array.from(checkedIds).every((id) => approvedIds.includes(id));
   const canBulkReject = checkedIds.size > 0 && Array.from(checkedIds).every((id) => submittedIds.includes(id));
@@ -158,16 +164,43 @@ export function AdminReceiptsList({
     <>
       {receipts.length > 0 && (
         <div
-          className="mb-3 flex items-center gap-2"
+          className="mb-3 flex flex-wrap items-center gap-3"
           onClick={(e) => e.stopPropagation()}
         >
-          <input
-            type="checkbox"
-            checked={checkedIds.size === receipts.length && receipts.length > 0}
-            onChange={toggleAll}
-            className="h-4 w-4 rounded border-neutral-300"
-          />
-          <span className="text-sm text-neutral-600">Select all on page</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={checkedIds.size === receipts.length && receipts.length > 0}
+              onChange={toggleAll}
+              className="h-4 w-4 rounded border-neutral-300"
+            />
+            <span className="text-sm text-neutral-600">Select all on page</span>
+          </div>
+          {allSubmitted && (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (confirm(`Approve all ${receipts.length} receipt(s)?`)) {
+                    runBulkApproveFor(receipts.map((r) => r.id));
+                  }
+                }}
+                disabled={isSubmitting}
+              >
+                Approve all
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setCheckedIds(new Set(receipts.map((r) => r.id)));
+                  setBulkAction("reject");
+                }}
+              >
+                Reject all
+              </Button>
+            </div>
+          )}
         </div>
       )}
       <div className="flex flex-col gap-3 pb-24 md:pb-0">

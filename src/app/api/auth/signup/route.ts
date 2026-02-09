@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/passwords";
-import { setSessionCookie } from "@/lib/auth";
+import { setSessionCookie, setSessionCookieOnResponse } from "@/lib/auth";
 
 const signupSchema = z.object({
   code: z.string().min(3),
@@ -15,9 +15,34 @@ const signupSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const body = await request.json();
-  const parsed = signupSchema.safeParse(body);
+  const contentType = request.headers.get("content-type") ?? "";
+  const isForm = contentType.includes("application/x-www-form-urlencoded");
+
+  let parsed: ReturnType<typeof signupSchema.safeParse>;
+
+  if (isForm) {
+    const formData = await request.formData();
+    const data = {
+      code: formData.get("code")?.toString() ?? "",
+      firstName: formData.get("firstName")?.toString() ?? "",
+      lastName: formData.get("lastName")?.toString() ?? "",
+      email: formData.get("email")?.toString() ?? "",
+      password: formData.get("password")?.toString() ?? "",
+      paymentMethod: (formData.get("paymentMethod")?.toString() ?? "venmo") as "venmo" | "zelle" | "paypal",
+      paymentHandle: formData.get("paymentHandle")?.toString() || undefined,
+    };
+    parsed = signupSchema.safeParse(data);
+  } else {
+    const body = await request.json();
+    parsed = signupSchema.safeParse(body);
+  }
+
   if (!parsed.success) {
+    if (isForm) {
+      const signupUrl = new URL("/signup", request.url);
+      signupUrl.searchParams.set("error", "Invalid input.");
+      return NextResponse.redirect(signupUrl);
+    }
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
@@ -93,31 +118,43 @@ export async function POST(request: Request) {
       };
     });
 
-    await setSessionCookie({
+    const payload = {
       userId: result.userId,
       orgId: result.orgId,
       role: result.role,
-    });
+    };
 
+    if (isForm) {
+      const response = NextResponse.redirect(new URL("/app", request.url));
+      await setSessionCookieOnResponse(response, payload);
+      return response;
+    }
+
+    await setSessionCookie(payload);
     return NextResponse.json({ ok: true, redirectUrl: "/app" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown";
-    if (message === "EMAIL_EXISTS") {
-      return NextResponse.json({ error: "Email already exists." }, { status: 409 });
-    }
-    if (message === "INVALID_CODE") {
-      return NextResponse.json({ error: "Invite code is invalid." }, { status: 400 });
-    }
-    if (message === "EXPIRED_CODE") {
-      return NextResponse.json({ error: "Invite code has expired." }, { status: 400 });
-    }
-    if (message === "USED_UP_CODE") {
-      return NextResponse.json(
-        { error: "Invite code has no remaining uses." },
-        { status: 400 }
-      );
+    const errorMsg =
+      message === "EMAIL_EXISTS"
+        ? "Email already exists."
+        : message === "INVALID_CODE"
+          ? "Invite code is invalid."
+          : message === "EXPIRED_CODE"
+            ? "Invite code has expired."
+            : message === "USED_UP_CODE"
+              ? "Invite code has no remaining uses."
+              : "Signup failed.";
+
+    if (isForm) {
+      const signupUrl = new URL("/signup", request.url);
+      signupUrl.searchParams.set("error", errorMsg);
+      signupUrl.searchParams.set("code", code);
+      return NextResponse.redirect(signupUrl);
     }
 
-    return NextResponse.json({ error: "Signup failed." }, { status: 500 });
+    const status =
+      message === "EMAIL_EXISTS" ? 409 :
+      message === "INVALID_CODE" || message === "EXPIRED_CODE" || message === "USED_UP_CODE" ? 400 : 500;
+    return NextResponse.json({ error: errorMsg }, { status });
   }
 }

@@ -7,16 +7,17 @@ import {
 } from "@/lib/jwt";
 
 const SESSION_COOKIE_NAME = "fratapp_session";
-const REFRESH_THRESHOLD = 60 * 60 * 24 * 14; // refresh when < 14 days left
+
+const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: SESSION_MAX_AGE_SECONDS,
+};
 
 function setSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  });
+  response.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
 }
 
 export async function middleware(request: NextRequest) {
@@ -51,17 +52,13 @@ export async function middleware(request: NextRequest) {
       },
     });
 
-    // Refresh session if close to expiring (keeps active users logged in)
-    const exp = payload.exp ?? 0;
-    const timeLeft = exp - Math.floor(Date.now() / 1000);
-    if (timeLeft > 0 && timeLeft < REFRESH_THRESHOLD) {
-      const newToken = await createSessionToken({
-        userId: payload.sub!,
-        role: payload.role,
-        orgId: payload.orgId!,
-      });
-      setSessionCookie(response, newToken);
-    }
+    // Refresh on every /app request: keeps cookie "touched" for Safari ITP and extends expiry
+    const newToken = await createSessionToken({
+      userId: payload.sub!,
+      role: payload.role,
+      orgId: payload.orgId!,
+    });
+    setSessionCookie(response, newToken);
 
     return response;
   } catch {
