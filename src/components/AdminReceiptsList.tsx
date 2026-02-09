@@ -23,12 +23,26 @@ type Receipt = {
   created_at: Date;
   user: {
     email: string;
-    profile?: { first_name: string; last_name: string } | null;
+    profile?: {
+      first_name: string;
+      last_name: string;
+      payment_method?: string;
+      payment_handle?: string | null;
+    } | null;
   };
 };
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+function formatPaymentInfo(method?: string, handle?: string | null) {
+  if (!handle?.trim()) return null;
+  const m = (method ?? "").toLowerCase();
+  if (m === "venmo") return `Venmo @${handle.replace(/^@/, "")}`;
+  if (m === "zelle") return `Zelle ${handle}`;
+  if (m === "paypal") return `PayPal ${handle}`;
+  return handle;
+}
 
 export function AdminReceiptsList({
   receipts,
@@ -162,6 +176,10 @@ export function AdminReceiptsList({
             receipt.user.profile?.first_name && receipt.user.profile?.last_name
               ? `${receipt.user.profile.first_name} ${receipt.user.profile.last_name}`
               : receipt.user.email;
+          const paymentInfo = formatPaymentInfo(
+            receipt.user.profile?.payment_method,
+            receipt.user.profile?.payment_handle
+          );
 
           return (
             <Card
@@ -199,9 +217,16 @@ export function AdminReceiptsList({
                       {receipt.category}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    {submitterName}
-                  </p>
+                  <div className="mt-2 rounded-md bg-neutral-100 px-2 py-1 inline-block">
+                    <p className="text-sm font-medium text-neutral-800">
+                      Submitted by {submitterName}
+                    </p>
+                    {paymentInfo && (
+                      <p className="text-xs text-neutral-600 mt-0.5">
+                        {paymentInfo}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-lg font-semibold text-neutral-900">
@@ -345,6 +370,10 @@ function AdminReceiptDrawer({
     receipt.user.profile?.first_name && receipt.user.profile?.last_name
       ? `${receipt.user.profile.first_name} ${receipt.user.profile.last_name}`
       : receipt.user.email;
+  const paymentInfo = formatPaymentInfo(
+    receipt.user.profile?.payment_method,
+    receipt.user.profile?.payment_handle
+  );
 
   return (
     <div className="space-y-4">
@@ -357,9 +386,17 @@ function AdminReceiptDrawer({
       <p className="text-sm text-neutral-600">
         {receipt.category} · {new Date(receipt.created_at).toLocaleDateString()}
       </p>
-      <p className="text-sm text-neutral-600">
-        Submitted by {submitterName} ({receipt.user.email})
-      </p>
+      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+        <p className="text-sm font-medium text-neutral-800">
+          Submitted by {submitterName}
+        </p>
+        <p className="text-xs text-neutral-500 mt-0.5">{receipt.user.email}</p>
+        {paymentInfo && (
+          <p className="text-sm font-medium text-neutral-700 mt-2">
+            Pay via {paymentInfo}
+          </p>
+        )}
+      </div>
       <Button variant="secondary" fullWidth onClick={onViewPhoto}>
         View receipt photo
       </Button>

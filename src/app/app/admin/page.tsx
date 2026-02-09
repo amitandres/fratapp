@@ -29,6 +29,8 @@ export default async function AdminPage({
             select: {
               first_name: true,
               last_name: true,
+              payment_method: true,
+              payment_handle: true,
             },
           },
         },

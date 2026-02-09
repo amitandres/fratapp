@@ -16,11 +16,28 @@ type Receipt = {
   photo_key: string;
   created_at: Date;
   rejection_reason?: string | null;
-  user?: { profile?: { first_name: string; last_name: string }; email?: string };
+  user?: {
+    profile?: {
+      first_name: string;
+      last_name: string;
+      payment_method?: string;
+      payment_handle?: string | null;
+    };
+    email?: string;
+  };
 };
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+function formatPaymentInfo(method?: string, handle?: string | null) {
+  if (!handle?.trim()) return null;
+  const m = (method ?? "").toLowerCase();
+  if (m === "venmo") return `Venmo @${handle.replace(/^@/, "")}`;
+  if (m === "zelle") return `Zelle ${handle}`;
+  if (m === "paypal") return `PayPal ${handle}`;
+  return handle;
+}
 
 function groupByMonth<T extends { created_at: Date }>(receipts: T[]) {
   const groups = new Map<string, T[]>();
@@ -103,9 +120,16 @@ export function ReceiptsList({
                           </p>
                         )}
                         {showSubmitter && receipt.user?.profile && (
-                          <p className="mt-1 text-xs text-neutral-500">
-                            {receipt.user.profile.first_name} {receipt.user.profile.last_name}
-                          </p>
+                          <div className="mt-2 rounded-md bg-neutral-100 px-2 py-1 inline-block">
+                            <p className="text-sm font-medium text-neutral-800">
+                              {receipt.user.profile.first_name} {receipt.user.profile.last_name}
+                            </p>
+                            {formatPaymentInfo(receipt.user.profile.payment_method, receipt.user.profile.payment_handle) && (
+                              <p className="text-xs text-neutral-600 mt-0.5">
+                                {formatPaymentInfo(receipt.user.profile.payment_method, receipt.user.profile.payment_handle)}
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
                       <div className="text-right shrink-0">
@@ -147,9 +171,17 @@ export function ReceiptsList({
               </p>
             )}
             {showSubmitter && selected.user && (
-              <p className="text-sm text-neutral-600">
-                Submitted by {selected.user.profile?.first_name} {selected.user.profile?.last_name} ({selected.user.email})
-              </p>
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <p className="text-sm font-medium text-neutral-800">
+                  Submitted by {selected.user.profile?.first_name} {selected.user.profile?.last_name}
+                </p>
+                <p className="text-xs text-neutral-500 mt-0.5">{selected.user.email}</p>
+                {formatPaymentInfo(selected.user.profile?.payment_method, selected.user.profile?.payment_handle) && (
+                  <p className="text-sm font-medium text-neutral-700 mt-2">
+                    Pay via {formatPaymentInfo(selected.user.profile?.payment_method, selected.user.profile?.payment_handle)}
+                  </p>
+                )}
+              </div>
             )}
             <Button
               variant="secondary"

@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import {
+  verifySessionToken,
+  createSessionToken,
+  SESSION_MAX_AGE_SECONDS,
+} from "@/lib/jwt";
 
 const SESSION_COOKIE_NAME = "fratapp_session";
+const REFRESH_THRESHOLD = 60 * 60 * 24 * 14; // refresh when < 14 days left
 
-const getSecret = () => {
-  const secret = process.env.SESSION_SECRET ?? "";
-  return new TextEncoder().encode(secret);
-};
+function setSessionCookie(response: NextResponse, token: string) {
+  response.cookies.set(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE_SECONDS,
+  });
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -20,7 +30,7 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const payload = await verifySessionToken(token);
     const role = payload.role as string | undefined;
     const orgId = payload.orgId as string | undefined;
     const userId = payload.sub as string | undefined;
@@ -35,11 +45,25 @@ export async function middleware(request: NextRequest) {
     if (orgId) requestHeaders.set("x-org-id", orgId);
     if (role) requestHeaders.set("x-role", role);
 
-    return NextResponse.next({
+    const response = NextResponse.next({
       request: {
         headers: requestHeaders,
       },
     });
+
+    // Refresh session if close to expiring (keeps active users logged in)
+    const exp = payload.exp ?? 0;
+    const timeLeft = exp - Math.floor(Date.now() / 1000);
+    if (timeLeft > 0 && timeLeft < REFRESH_THRESHOLD) {
+      const newToken = await createSessionToken({
+        userId: payload.sub!,
+        role: payload.role,
+        orgId: payload.orgId!,
+      });
+      setSessionCookie(response, newToken);
+    }
+
+    return response;
   } catch {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
@@ -48,5 +72,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*"],
+  matcher: ["/app", "/app/:path*"],
 };

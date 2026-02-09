@@ -1,33 +1,20 @@
 import { cookies } from "next/headers";
-import { SignJWT, jwtVerify } from "jose";
-import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import {
+  createSessionToken as createToken,
+  verifySessionToken,
+  SESSION_MAX_AGE_SECONDS,
+} from "@/lib/jwt";
 
 const SESSION_COOKIE_NAME = "fratapp_session";
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
-
-const getJwtSecret = () => new TextEncoder().encode(env.SESSION_SECRET);
 
 type SessionRole = "member" | "treasurer" | "exec" | "admin";
-
-type SessionPayload = {
-  sub: string;
-  role: SessionRole;
-  orgId: string;
-};
 
 export const createSessionToken = async (payload: {
   userId: string;
   role: SessionRole;
   orgId: string;
-}) => {
-  return new SignJWT({ role: payload.role, orgId: payload.orgId })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(payload.userId)
-    .setIssuedAt()
-    .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
-    .sign(getJwtSecret());
-};
+}) => createToken(payload);
 
 export const setSessionCookie = async (payload: {
   userId: string;
@@ -56,21 +43,21 @@ export const clearSessionCookie = async () => {
   });
 };
 
-/** Refresh session if it has less than 7 days left. Keeps active users logged in. */
+/** Refresh session if it has less than 14 days left. Keeps active users logged in. */
 export const maybeRefreshSession = async () => {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return;
 
   try {
-    const { payload } = await jwtVerify<SessionPayload & { exp?: number }>(token, getJwtSecret());
+    const payload = await verifySessionToken(token);
     const exp = payload.exp ?? 0;
     const timeLeft = exp - Math.floor(Date.now() / 1000);
-    const refreshThreshold = 60 * 60 * 24 * 7; // refresh when < 7 days left
+    const refreshThreshold = 60 * 60 * 24 * 14; // refresh when < 14 days left
     if (timeLeft > 0 && timeLeft < refreshThreshold) {
       const newToken = await createSessionToken({
         userId: payload.sub!,
-        role: payload.role,
+        role: payload.role as SessionRole,
         orgId: payload.orgId!,
       });
       cookieStore.set(SESSION_COOKIE_NAME, newToken, {
@@ -94,7 +81,7 @@ export const getSessionUser = async () => {
   }
 
   try {
-    const { payload } = await jwtVerify<SessionPayload>(token, getJwtSecret());
+    const payload = await verifySessionToken(token);
     return {
       userId: payload.sub ?? null,
       role: payload.role,

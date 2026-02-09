@@ -21,9 +21,20 @@ type Member = {
   first_name: string;
   last_name: string;
   role: string;
+  payment_method?: string;
+  payment_handle?: string | null;
   totalAmountCents: number;
   user: { id: string; email: string };
 };
+
+function formatPaymentInfo(method?: string, handle?: string | null) {
+  if (!handle?.trim()) return null;
+  const m = (method ?? "").toLowerCase();
+  if (m === "venmo") return `Venmo @${handle.replace(/^@/, "")}`;
+  if (m === "zelle") return `Zelle ${handle}`;
+  if (m === "paypal") return `PayPal ${handle}`;
+  return handle;
+}
 
 export function OrgSettings({
   org,
@@ -272,6 +283,11 @@ export function OrgSettings({
                   <p className="text-xs text-neutral-600">
                     {m.role} · {formatCurrency(m.totalAmountCents)} submitted
                   </p>
+                  {formatPaymentInfo(m.payment_method, m.payment_handle) && (
+                    <p className="text-xs font-medium text-neutral-700 mt-1">
+                      {formatPaymentInfo(m.payment_method, m.payment_handle)}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {isSelf ? (

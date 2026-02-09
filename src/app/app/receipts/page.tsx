@@ -37,6 +37,8 @@ export default async function ReceiptsPage({
                   select: {
                     first_name: true,
                     last_name: true,
+                    payment_method: true,
+                    payment_handle: true,
                   },
                 },
               },
