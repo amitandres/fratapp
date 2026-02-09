@@ -20,10 +20,32 @@ function setSessionCookie(response: NextResponse, token: string) {
   response.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
 }
 
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/invite", "/setup-chapter"];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
+  // Public routes: if logged in, redirect to /app and refresh cookie
+  if (PUBLIC_PATHS.includes(pathname)) {
+    if (!token) return NextResponse.next();
+
+    try {
+      const payload = await verifySessionToken(token);
+      const response = NextResponse.redirect(new URL("/app", request.url));
+      const newToken = await createSessionToken({
+        userId: payload.sub!,
+        role: payload.role,
+        orgId: payload.orgId!,
+      });
+      setSessionCookie(response, newToken);
+      return response;
+    } catch {
+      return NextResponse.next();
+    }
+  }
+
+  // Protected /app routes
   if (!token) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
@@ -52,7 +74,6 @@ export async function middleware(request: NextRequest) {
       },
     });
 
-    // Refresh on every /app request: keeps cookie "touched" for Safari ITP and extends expiry
     const newToken = await createSessionToken({
       userId: payload.sub!,
       role: payload.role,
@@ -69,5 +90,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app", "/app/:path*"],
+  matcher: ["/", "/login", "/signup", "/invite", "/setup-chapter", "/app", "/app/:path*"],
 };
