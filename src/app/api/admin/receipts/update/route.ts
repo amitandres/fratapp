@@ -85,54 +85,6 @@ export async function POST(request: Request) {
     updates.rejected_by_user_id = session.userId;
   }
 
-  await prisma.receipts.update({
-    where: { id: receipt.id },
-    data: updates as Parameters<typeof prisma.receipts.update>[0]["data"],
-  });
-
-  if (receipt.status !== parsed.data.status) {
-    const action =
-      parsed.data.status === "approved"
-        ? "RECEIPT_APPROVED"
-        : parsed.data.status === "paid"
-          ? "RECEIPT_PAID"
-          : parsed.data.status === "rejected"
-            ? "RECEIPT_REJECTED"
-            : "RECEIPT_UPDATED";
-    await createAuditLog(prisma, {
-      orgId: session.orgId,
-      actorUserId: session.userId,
-      entityType: "RECEIPT",
-      entityId: receipt.id,
-      action,
-      metadata: {
-        previousStatus: receipt.status,
-        newStatus: parsed.data.status,
-        reason: rejectionReason ?? undefined,
-        amountCents,
-      },
-    });
-    if (["approved", "paid", "rejected"].includes(parsed.data.status)) {
-      const titles = {
-        approved: "Receipt approved",
-        paid: "Receipt marked paid",
-        rejected: "Receipt rejected",
-      };
-      await createNotification(prisma, {
-        orgId: session.orgId,
-        userId: receipt.user_id,
-        type: action,
-        title: titles[parsed.data.status as keyof typeof titles],
-        body:
-          parsed.data.status === "rejected" && rejectionReason
-            ? `"${parsed.data.description}" was rejected: ${rejectionReason}`
-            : `"${parsed.data.description}" ($${(amountCents / 100).toFixed(2)})`,
-        entityType: "RECEIPT",
-        entityId: receipt.id,
-      });
-    }
-  }
-
   const auditEntries = [
     receipt.status !== updates.status
       ? { field: "status", old: receipt.status, next: updates.status }
@@ -165,17 +117,71 @@ export async function POST(request: Request) {
       : null,
   ].filter(Boolean) as Array<{ field: string; old: string; next: string }>;
 
-  if (auditEntries.length > 0) {
-    await prisma.receipt_edits.createMany({
-      data: auditEntries.map((entry) => ({
-        receipt_id: receipt.id,
-        editor_user_id: session.userId,
-        field_name: entry.field,
-        old_value: entry.old,
-        new_value: entry.next,
-      })),
+  await prisma.$transaction(async (tx) => {
+    await tx.receipts.update({
+      where: { id: receipt.id },
+      data: updates as Parameters<typeof prisma.receipts.update>[0]["data"],
     });
-  }
 
+    if (receipt.status !== parsed.data.status) {
+      const action =
+        parsed.data.status === "approved"
+          ? "RECEIPT_APPROVED"
+          : parsed.data.status === "paid"
+            ? "RECEIPT_PAID"
+            : parsed.data.status === "rejected"
+              ? "RECEIPT_REJECTED"
+              : "RECEIPT_UPDATED";
+      await createAuditLog(tx, {
+        orgId: session.orgId,
+        actorUserId: session.userId,
+        entityType: "RECEIPT",
+        entityId: receipt.id,
+        action,
+        metadata: {
+          previousStatus: receipt.status,
+          newStatus: parsed.data.status,
+          reason: rejectionReason ?? undefined,
+          amountCents,
+        },
+      });
+    if (["approved", "paid", "rejected"].includes(parsed.data.status)) {
+      const titles = {
+        approved: "Receipt approved",
+        paid: "Receipt marked paid",
+        rejected: "Receipt rejected",
+      };
+      await createNotification(tx, {
+        orgId: session.orgId,
+        userId: receipt.user_id,
+        type: action,
+        title: titles[parsed.data.status as keyof typeof titles],
+        body:
+          parsed.data.status === "rejected" && rejectionReason
+            ? `"${parsed.data.description}" was rejected: ${rejectionReason}`
+            : `"${parsed.data.description}" ($${(amountCents / 100).toFixed(2)})`,
+        entityType: "RECEIPT",
+        entityId: receipt.id,
+      });
+    }
+    }
+
+    if (auditEntries.length > 0) {
+      await tx.receipt_edits.createMany({
+        data: auditEntries.map((entry) => ({
+          receipt_id: receipt.id,
+          editor_user_id: session.userId,
+          field_name: entry.field,
+          old_value: entry.old,
+          new_value: entry.next,
+        })),
+      });
+    }
+  });
+
+  const isFetch = request.headers.get("X-Requested-With") === "XMLHttpRequest";
+  if (isFetch) {
+    return NextResponse.json({ ok: true });
+  }
   return NextResponse.redirect(new URL("/app/admin", request.url));
 }

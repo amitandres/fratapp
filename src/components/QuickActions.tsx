@@ -66,6 +66,7 @@ export function QuickActions({
 
       const response = await fetch("/api/admin/receipts/update", {
         method: "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
         body: formData,
       });
 
