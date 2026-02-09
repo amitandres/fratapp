@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Drawer } from "@/components/Drawer";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 type Receipt = {
   id: string;
@@ -20,30 +23,34 @@ export function QuickActions({
   onRejectSuccess?: () => void;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const submitReject = async () => {
+    if (!rejectReason.trim() || rejectReason.trim().length < 3) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/receipts/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiptId: receipt.id, reason: rejectReason.trim() }),
+      });
+      if (res.ok) {
+        setShowRejectModal(false);
+        setRejectReason("");
+        (onRejectSuccess ?? (() => window.location.reload()))();
+      } else {
+        const d = await res.json();
+        alert(d.error ?? "Failed to reject");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleAction = async (action: string) => {
     if (action === "rejected") {
-      const reason = window.prompt("Rejection reason (required, min 3 characters):");
-      if (!reason || reason.trim().length < 3) {
-        if (reason !== null) alert("Reason must be at least 3 characters.");
-        return;
-      }
-      setIsSubmitting(true);
-      try {
-        const res = await fetch("/api/admin/receipts/reject", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ receiptId: receipt.id, reason: reason.trim() }),
-        });
-        if (res.ok) {
-          (onRejectSuccess ?? (() => window.location.reload()))();
-        } else {
-          const d = await res.json();
-          alert(d.error ?? "Failed to reject");
-        }
-      } finally {
-        setIsSubmitting(false);
-      }
+      setShowRejectModal(true);
       return;
     }
 
@@ -65,7 +72,8 @@ export function QuickActions({
       if (response.ok) {
         (onRejectSuccess ?? (() => window.location.reload()))();
       } else {
-        alert("Failed to update receipt");
+        const d = await response.json().catch(() => ({}));
+        alert(d.error ?? "Failed to update receipt");
       }
     } catch {
       alert("Error updating receipt");
@@ -113,6 +121,47 @@ export function QuickActions({
           Rejected
         </span>
       )}
+
+      <Drawer
+        open={showRejectModal}
+        onClose={() => {
+          setShowRejectModal(false);
+          setRejectReason("");
+        }}
+        title="Reject receipt"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-neutral-600">
+            Provide a reason for rejecting this receipt (min 3 characters).
+          </p>
+          <Input
+            label="Reason"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="e.g. Missing vendor name"
+            minLength={3}
+          />
+          <div className="flex gap-2">
+            <Button
+              fullWidth
+              onClick={submitReject}
+              disabled={rejectReason.trim().length < 3 || isSubmitting}
+            >
+              {isSubmitting ? "Rejecting..." : "Reject"}
+            </Button>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                setShowRejectModal(false);
+                setRejectReason("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Drawer>
     </>
   );
 }

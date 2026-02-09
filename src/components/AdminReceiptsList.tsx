@@ -9,6 +9,7 @@ import { Drawer } from "@/components/Drawer";
 import { QuickActions } from "@/components/QuickActions";
 import { AuditTimeline } from "@/components/AuditTimeline";
 import { Input } from "@/components/ui/Input";
+import { PhotoModal } from "@/components/PhotoModal";
 
 type Receipt = {
   id: string;
@@ -36,6 +37,7 @@ export function AdminReceiptsList({
 }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [photoViewUrl, setPhotoViewUrl] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<"approve" | "paid" | "reject" | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -135,7 +137,7 @@ export function AdminReceiptsList({
   const openPhoto = async (key: string) => {
     const res = await fetch(`/api/storage/view-url?key=${encodeURIComponent(key)}`);
     const data = await res.json();
-    if (data.signedUrl) window.open(data.signedUrl, "_blank");
+    if (data.signedUrl) setPhotoViewUrl(data.signedUrl);
   };
 
   return (
@@ -324,6 +326,8 @@ export function AdminReceiptsList({
           />
         )}
       </Drawer>
+
+      <PhotoModal imageUrl={photoViewUrl} onClose={() => setPhotoViewUrl(null)} />
     </>
   );
 }

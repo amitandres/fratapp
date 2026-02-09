@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/Drawer";
+import { PhotoModal } from "@/components/PhotoModal";
 
 type Receipt = {
   id: string;
@@ -52,9 +53,7 @@ export function ReceiptsList({
   const openPhoto = async (key: string) => {
     const res = await fetch(`/api/storage/view-url?key=${encodeURIComponent(key)}`);
     const data = await res.json();
-    if (data.signedUrl) {
-      window.open(data.signedUrl, "_blank");
-    }
+    if (data.signedUrl) setViewUrl(data.signedUrl);
   };
 
   return (
@@ -162,6 +161,8 @@ export function ReceiptsList({
           </div>
         )}
       </Drawer>
+
+      <PhotoModal imageUrl={viewUrl} onClose={() => setViewUrl(null)} />
     </>
   );
 }

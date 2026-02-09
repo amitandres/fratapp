@@ -8,9 +8,9 @@ import { createNotification } from "@/lib/notifications";
 const updateSchema = z.object({
   receiptId: z.string().uuid(),
   status: z.enum(["submitted", "approved", "paid", "rejected", "needs_review"]),
-  amount: z.string().min(1),
-  description: z.string().min(1),
-  category: z.enum(["food", "drinks", "hardware", "lights", "other"]),
+  amount: z.string().optional(),
+  description: z.string().optional(),
+  category: z.enum(["food", "drinks", "hardware", "lights", "other"]).optional(),
   paidVia: z.enum(["venmo", "zelle", "paypal", "cash"]).optional().or(z.literal("")),
   paidNote: z.string().optional(),
   rejectionReason: z.string().min(3).max(500).optional().or(z.literal("")),
@@ -19,8 +19,9 @@ const updateSchema = z.object({
 export async function POST(request: Request) {
   const session = await requireAdminRole();
   const body = await request.formData();
+  const receiptId = body.get("receiptId");
   const parsed = updateSchema.safeParse({
-    receiptId: body.get("receiptId"),
+    receiptId,
     status: body.get("status"),
     amount: body.get("amount"),
     description: body.get("description"),
@@ -30,18 +31,13 @@ export async function POST(request: Request) {
     rejectionReason: body.get("rejectionReason") ?? undefined,
   });
 
-  if (!parsed.success) {
+  if (!parsed.success || typeof receiptId !== "string") {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
-  }
-
-  const amountNumber = Number(parsed.data.amount);
-  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
-    return NextResponse.json({ error: "Invalid amount." }, { status: 400 });
   }
 
   const receipt = await prisma.receipts.findFirst({
     where: {
-      id: parsed.data.receiptId,
+      id: receiptId,
       org_id: session.orgId,
     },
   });
@@ -50,8 +46,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
+  const amountStr = parsed.data.amount?.trim();
+  const amountNumber = amountStr ? Number(amountStr) : receipt.amount_cents / 100;
+  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+    return NextResponse.json({ error: "Invalid amount." }, { status: 400 });
+  }
+
+  const description = parsed.data.description?.trim() || receipt.description;
+  const category = parsed.data.category || receipt.category;
+
   const amountCents = Math.round(amountNumber * 100);
-  const paidVia = parsed.data.paidVia === "" ? null : parsed.data.paidVia ?? null;
+  const paidVia =
+    parsed.data.paidVia === "" ? null
+    : parsed.data.paidVia ?? (parsed.data.status === "paid" ? receipt.paid_via ?? "venmo" : receipt.paid_via);
   const paidAt =
     parsed.data.status === "paid" ? receipt.paid_at ?? new Date() : null;
   const rejectionReason =
@@ -59,11 +66,15 @@ export async function POST(request: Request) {
       ? parsed.data.rejectionReason.trim()
       : null;
 
+  if (parsed.data.status === "rejected" && !rejectionReason) {
+    return NextResponse.json({ error: "Rejection reason required (min 3 characters)." }, { status: 400 });
+  }
+
   const updates: Record<string, unknown> = {
     status: parsed.data.status,
     amount_cents: amountCents,
-    description: parsed.data.description,
-    category: parsed.data.category,
+    description,
+    category,
     paid_via: paidVia,
     paid_note: parsed.data.paidNote ?? null,
     paid_at: paidAt,
