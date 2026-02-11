@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
   const isForm = contentType.includes("application/x-www-form-urlencoded");
 
-  let parsed: z.SafeParseReturnType<z.infer<typeof schema>, z.infer<typeof schema>>;
+  let parsed;
   let formToken = "";
   if (isForm) {
     const formData = await request.formData();
