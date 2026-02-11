@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 
+export async function OPTIONS() {
+  return new Response(null, { status: 204 });
+}
+
 const createSchema = z.object({
   name: z.string().min(1).max(100).trim(),
 });
@@ -16,9 +20,25 @@ function generateInviteCode(): string {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json();
-  const parsed = createSchema.safeParse(body);
+  const contentType = request.headers.get("content-type") ?? "";
+  const isForm = contentType.includes("application/x-www-form-urlencoded");
+
+  let parsed: ReturnType<typeof createSchema.safeParse>;
+  if (isForm) {
+    const formData = await request.formData();
+    const name = formData.get("name")?.toString() ?? "";
+    parsed = createSchema.safeParse({ name: name.trim() });
+  } else {
+    const body = await request.json();
+    parsed = createSchema.safeParse(body);
+  }
+
   if (!parsed.success) {
+    if (isForm) {
+      const setupUrl = new URL("/setup-chapter", request.url);
+      setupUrl.searchParams.set("error", "Chapter name must be 1–100 characters.");
+      return NextResponse.redirect(setupUrl);
+    }
     return NextResponse.json(
       { error: "Chapter name must be 1–100 characters." },
       { status: 400 }
@@ -58,5 +78,9 @@ export async function POST(request: Request) {
   }
 
   const redirectUrl = `/signup?code=${encodeURIComponent(code)}`;
+
+  if (isForm) {
+    return NextResponse.redirect(new URL(redirectUrl, request.url));
+  }
   return NextResponse.json({ inviteCode: code, redirectUrl });
 }

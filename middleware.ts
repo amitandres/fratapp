@@ -24,6 +24,12 @@ const PUBLIC_PATHS = ["/", "/login", "/signup", "/invite", "/setup-chapter"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Never run middleware on API routes
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next();
+  }
+
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
   // Public routes: if logged in, redirect to /app and refresh cookie

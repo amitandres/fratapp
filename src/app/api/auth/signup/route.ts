@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/passwords";
 import { setSessionCookie, setSessionCookieOnResponse } from "@/lib/auth";
 
+export async function OPTIONS() {
+  return new Response(null, { status: 204 });
+}
+
 const signupSchema = z.object({
   code: z.string().min(3),
   firstName: z.string().min(1),
