@@ -1,11 +1,14 @@
-"use client";
+import { createChapter } from "./actions";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-
-function SetupForm() {
-  const searchParams = useSearchParams();
-  const errorFromUrl = searchParams.get("error");
+export default async function SetupChapterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }> | { error?: string };
+}) {
+  const params = "then" in searchParams && typeof (searchParams as Promise<unknown>).then === "function"
+    ? await (searchParams as Promise<{ error?: string }>)
+    : (searchParams as { error?: string });
+  const errorFromUrl = params?.error;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 py-12">
@@ -14,7 +17,7 @@ function SetupForm() {
         Create your chapter, then sign up as the first admin.
       </p>
 
-      <form action="/api/chapters" method="POST" className="mt-8 flex flex-col gap-4">
+      <form action={createChapter} className="mt-8 flex flex-col gap-4">
         <label className="flex flex-col gap-2 text-sm font-medium">
           Chapter name
           <input
@@ -45,23 +48,5 @@ function SetupForm() {
         Back to home
       </a>
     </main>
-  );
-}
-
-/**
- * Native form POST + server redirect: avoids fetch/405 issues on some hosts.
- */
-export default function SetupChapterPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 py-12">
-          <h1 className="text-2xl font-semibold">Set up a new chapter</h1>
-          <p className="mt-2 text-sm text-neutral-600">Loading...</p>
-        </main>
-      }
-    >
-      <SetupForm />
-    </Suspense>
   );
 }
