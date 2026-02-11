@@ -3,6 +3,7 @@ import { requireCurrentUserAndProfile } from "@/lib/auth";
 import { canManageOrgSettings } from "@/lib/permissions";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { OrgSettings } from "@/components/OrgSettings";
+import { ProfileSettings } from "@/components/ProfileSettings";
 
 export default async function SettingsPage() {
   const session = await requireCurrentUserAndProfile();
@@ -50,6 +51,8 @@ export default async function SettingsPage() {
           Your account and chapter.
         </p>
       </div>
+
+      <ProfileSettings />
 
       <Card>
         <CardHeader>

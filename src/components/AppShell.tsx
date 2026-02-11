@@ -60,7 +60,7 @@ export function AppShell({
               )}
             </a>
             <a
-              href="/api/auth/logout"
+              href="/logout"
               className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-300"
             >
               Log out

@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 /**
  * Native form POST + server redirect: most reliable for cookie persistence.
@@ -40,13 +41,21 @@ function LoginForm() {
 
         <label className="flex flex-col gap-2 text-sm font-medium">
           Password
-          <input
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            className="rounded-md border border-neutral-200 px-3 py-2 text-base"
-          />
+          <div className="flex items-center justify-between gap-2">
+            <input
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              className="flex-1 rounded-md border border-neutral-200 px-3 py-2 text-base"
+            />
+            <Link
+              href="/forgot-password"
+              className="shrink-0 text-sm text-neutral-600 underline hover:text-neutral-800"
+            >
+              Forgot password?
+            </Link>
+          </div>
         </label>
 
         {errorFromUrl ? (

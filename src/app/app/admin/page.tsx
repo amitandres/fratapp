@@ -36,6 +36,13 @@ export default async function AdminPage({
           },
         },
       },
+      rejected_by_user: {
+        include: {
+          profile: {
+            select: { first_name: true, last_name: true },
+          },
+        },
+      },
     },
     orderBy: { created_at: "desc" },
   });

@@ -1,12 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type InviteStatus = "idle" | "checking" | "valid" | "invalid";
 
+const DEBOUNCE_MS = 250;
+
 /**
  * Native form POST + server redirect for signup: same bulletproof cookie flow as login.
+ * Invite code: debounced validation on keystroke + on Enter.
  */
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -18,6 +21,8 @@ function SignupForm() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [orgName, setOrgName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [usesRemaining, setUsesRemaining] = useState<number | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -26,12 +31,13 @@ function SignupForm() {
   const [paymentMethod, setPaymentMethod] = useState("venmo");
   const [paymentHandle, setPaymentHandle] = useState("");
 
-  const validateCode = async (value: string) => {
+  const validateCode = useCallback(async (value: string) => {
     if (!value) {
       setStatus("idle");
       setInviteError(null);
       setOrgName(null);
       setRole(null);
+      setUsesRemaining(null);
       return;
     }
 
@@ -47,25 +53,58 @@ function SignupForm() {
         setInviteError(payload.error ?? "Invalid invite code.");
         setOrgName(null);
         setRole(null);
+        setUsesRemaining(null);
         return;
       }
 
       setStatus("valid");
       setOrgName(payload.orgName);
       setRole(payload.role);
+      setUsesRemaining(payload.usesRemaining ?? null);
     } catch {
       setStatus("invalid");
       setInviteError("Unable to validate invite code.");
       setOrgName(null);
       setRole(null);
+      setUsesRemaining(null);
     }
-  };
+  }, []);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (initialCode) {
       validateCode(initialCode);
     }
-  }, [initialCode]);
+  }, [initialCode, validateCode]);
+
+  const handleCodeChange = (value: string) => {
+    const trimmed = value.trim();
+    setCode(trimmed);
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    if (!trimmed) {
+      setStatus("idle");
+      setInviteError(null);
+      setOrgName(null);
+      setRole(null);
+      setUsesRemaining(null);
+      return;
+    }
+    debounceRef.current = setTimeout(() => validateCode(trimmed), DEBOUNCE_MS);
+  };
+
+  const handleCodeKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && code.trim()) {
+      e.preventDefault();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      validateCode(code.trim());
+    }
+  };
+
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 py-10">
@@ -79,22 +118,26 @@ function SignupForm() {
           Invite code
           <input
             value={code}
-            onChange={(event) => setCode(event.target.value.trim())}
-            onBlur={() => validateCode(code)}
+            onChange={(e) => handleCodeChange(e.target.value)}
+            onKeyDown={handleCodeKeyDown}
             className="mt-2 w-full rounded-md border border-neutral-200 px-3 py-2 text-base"
-            placeholder="Enter code"
+            placeholder="Enter code (or paste from invite link)"
+            autoComplete="one-time-code"
           />
         </label>
 
         {status === "checking" ? (
-          <p className="text-sm text-neutral-500">Checking code...</p>
+          <p className="text-sm text-neutral-500">Checking code…</p>
         ) : null}
 
-        {inviteError ? <p className="text-sm text-red-600">{inviteError}</p> : null}
+        {status === "invalid" && inviteError ? (
+          <p className="text-sm text-red-600">{inviteError}</p>
+        ) : null}
 
-        {status === "valid" ? (
+        {status === "valid" && orgName && role ? (
           <p className="text-sm text-emerald-700">
             Invited to {orgName} as {role}.
+            {usesRemaining != null ? ` ${usesRemaining} invite${usesRemaining === 1 ? "" : "s"} remaining.` : ""}
           </p>
         ) : null}
       </div>
@@ -104,6 +147,7 @@ function SignupForm() {
           action="/api/auth/signup"
           method="POST"
           className="mt-8 flex flex-col gap-4"
+          onSubmit={() => setIsCreating(true)}
         >
           <input type="hidden" name="code" value={code} />
 
@@ -163,8 +207,9 @@ function SignupForm() {
               className="rounded-md border border-neutral-200 px-3 py-2 text-base"
             >
               <option value="venmo">Venmo</option>
+              <option value="cashapp">CashApp</option>
               <option value="zelle">Zelle</option>
-              <option value="paypal">PayPal</option>
+              <option value="other">Other</option>
             </select>
           </label>
 
@@ -184,9 +229,10 @@ function SignupForm() {
 
           <button
             type="submit"
-            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white"
+            disabled={isCreating}
+            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
           >
-            Create account
+            {isCreating ? "Creating account…" : "Create account"}
           </button>
         </form>
       ) : null}

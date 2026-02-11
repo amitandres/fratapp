@@ -21,8 +21,10 @@ enum role {
 
 enum payment_method {
   venmo
+  cashapp
   zelle
   paypal
+  other
 }
 
 enum category {
@@ -83,10 +85,25 @@ model users {
   password_hash String
   created_at    DateTime @default(now())
 
-  profile              profiles?
-  receipts             receipts[]
-  receipts_rejected    receipts[]       @relation("ReceiptRejectedBy")
-  edits                receipt_edits[]  @relation("ReceiptEditUser")
+  profile                profiles?
+  receipts               receipts[]
+  receipts_rejected      receipts[]           @relation("ReceiptRejectedBy")
+  edits                  receipt_edits[]      @relation("ReceiptEditUser")
+  password_reset_tokens  password_reset_tokens[]
+}
+
+model password_reset_tokens {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  token_hash String
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([token_hash])
+  @@index([expires_at])
 }
 
 model profiles {

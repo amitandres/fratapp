@@ -14,7 +14,7 @@ const signupSchema = z.object({
   lastName: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
-  paymentMethod: z.enum(["venmo", "zelle", "paypal"]),
+  paymentMethod: z.enum(["venmo", "cashapp", "zelle", "other"]),
   paymentHandle: z.string().optional(),
 });
 
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       lastName: formData.get("lastName")?.toString() ?? "",
       email: formData.get("email")?.toString() ?? "",
       password: formData.get("password")?.toString() ?? "",
-      paymentMethod: (formData.get("paymentMethod")?.toString() ?? "venmo") as "venmo" | "zelle" | "paypal",
+      paymentMethod: (formData.get("paymentMethod")?.toString() ?? "venmo") as "venmo" | "cashapp" | "zelle" | "other",
       paymentHandle: formData.get("paymentHandle")?.toString() || undefined,
     };
     parsed = signupSchema.safeParse(data);

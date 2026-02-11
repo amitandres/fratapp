@@ -31,6 +31,7 @@ function formatPaymentInfo(method?: string, handle?: string | null) {
   if (!handle?.trim()) return null;
   const m = (method ?? "").toLowerCase();
   if (m === "venmo") return `Venmo @${handle.replace(/^@/, "")}`;
+  if (m === "cashapp") return `CashApp $${handle.replace(/^\$/, "")}`;
   if (m === "zelle") return `Zelle ${handle}`;
   if (m === "paypal") return `PayPal ${handle}`;
   return handle;

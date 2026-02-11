@@ -20,7 +20,15 @@ function setSessionCookie(response: NextResponse, token: string) {
   response.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
 }
 
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/invite", "/setup-chapter"];
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/signup",
+  "/invite",
+  "/setup-chapter",
+  "/forgot-password",
+  "/reset-password",
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -96,5 +104,15 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/signup", "/invite", "/setup-chapter", "/app", "/app/:path*"],
+  matcher: [
+  "/",
+  "/login",
+  "/signup",
+  "/invite",
+  "/setup-chapter",
+  "/forgot-password",
+  "/reset-password",
+  "/app",
+  "/app/:path*",
+],
 };

@@ -16,6 +16,11 @@ type Receipt = {
   photo_key: string;
   created_at: Date;
   rejection_reason?: string | null;
+  rejected_at?: Date | string | null;
+  rejected_by_user?: {
+    profile?: { first_name: string; last_name: string } | null;
+    email?: string;
+  } | null;
   user?: {
     profile?: {
       first_name: string;
@@ -34,6 +39,7 @@ function formatPaymentInfo(method?: string, handle?: string | null) {
   if (!handle?.trim()) return null;
   const m = (method ?? "").toLowerCase();
   if (m === "venmo") return `Venmo @${handle.replace(/^@/, "")}`;
+  if (m === "cashapp") return `CashApp $${handle.replace(/^\$/, "")}`;
   if (m === "zelle") return `Zelle ${handle}`;
   if (m === "paypal") return `PayPal ${handle}`;
   return handle;
@@ -64,8 +70,26 @@ export function ReceiptsList({
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewUrl, setViewUrl] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const selected = receipts.find((r) => r.id === selectedId);
+
+  const deleteReceipt = async (id: string) => {
+    if (!confirm("Delete this receipt? This cannot be undone.")) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/receipts/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setSelectedId(null);
+        window.location.reload();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error ?? "Failed to delete");
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const openPhoto = async (key: string) => {
     const res = await fetch(`/api/storage/view-url?key=${encodeURIComponent(key)}`);
@@ -114,10 +138,26 @@ export function ReceiptsList({
                             {receipt.category}
                           </span>
                         </div>
-                        {receipt.status === "rejected" && receipt.rejection_reason && (
-                          <p className="mt-1 text-xs text-red-600">
-                            Rejected: {receipt.rejection_reason}
-                          </p>
+                        {receipt.status === "rejected" && (
+                          <div className="mt-1 space-y-0.5">
+                            {receipt.rejection_reason && (
+                              <p className="text-xs text-red-600">Reason: {receipt.rejection_reason}</p>
+                            )}
+                            <p className="text-xs text-neutral-500">
+                              {receipt.rejected_at
+                                ? `Rejected ${new Date(receipt.rejected_at).toLocaleDateString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })}`
+                                : "Rejected"}
+                              {receipt.rejected_by_user?.profile
+                                ? ` by ${receipt.rejected_by_user.profile.first_name} ${receipt.rejected_by_user.profile.last_name}`
+                                : receipt.rejected_by_user?.email
+                                  ? ` by ${receipt.rejected_by_user.email}`
+                                  : ""}
+                            </p>
+                          </div>
                         )}
                         {showSubmitter && receipt.user?.profile && (
                           <div className="mt-2 rounded-md bg-neutral-100 px-2 py-1 inline-block">
@@ -165,10 +205,26 @@ export function ReceiptsList({
             <p className="text-sm text-neutral-600">
               {selected.category} · {new Date(selected.created_at).toLocaleDateString()}
             </p>
-            {selected.status === "rejected" && selected.rejection_reason && (
-              <p className="text-sm text-red-600">
-                Rejected: {selected.rejection_reason}
-              </p>
+            {selected.status === "rejected" && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-1">
+                {selected.rejection_reason && (
+                  <p className="text-sm text-red-800 font-medium">Reason: {selected.rejection_reason}</p>
+                )}
+                <p className="text-xs text-red-700">
+                  {selected.rejected_at
+                    ? `Rejected ${new Date(selected.rejected_at).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}`
+                    : "Rejected"}
+                  {selected.rejected_by_user?.profile
+                    ? ` by ${selected.rejected_by_user.profile.first_name} ${selected.rejected_by_user.profile.last_name}`
+                    : selected.rejected_by_user?.email
+                      ? ` by ${selected.rejected_by_user.email}`
+                      : ""}
+                </p>
+              </div>
             )}
             {showSubmitter && selected.user && (
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
@@ -190,6 +246,16 @@ export function ReceiptsList({
             >
               View receipt photo
             </Button>
+            {selected.status === "submitted" && (
+              <Button
+                variant="danger"
+                fullWidth
+                onClick={() => deleteReceipt(selected.id)}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting…" : "Delete receipt"}
+              </Button>
+            )}
           </div>
         )}
       </Drawer>

@@ -5,6 +5,13 @@ import { Drawer } from "@/components/Drawer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
+const REJECTION_PRESETS = [
+  "Missing itemized receipt",
+  "Wrong category",
+  "Not eligible for reimbursement",
+  "Duplicate receipt",
+] as const;
+
 type Receipt = {
   id: string;
   status: string;
@@ -133,13 +140,29 @@ export function QuickActions({
       >
         <div className="space-y-4">
           <p className="text-sm text-neutral-600">
-            Provide a reason for rejecting this receipt (min 3 characters).
+            Reason is required (min 3 characters). Select a preset or type your own.
           </p>
+          <div className="flex flex-wrap gap-2">
+            {REJECTION_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setRejectReason(preset)}
+                className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
+                  rejectReason === preset
+                    ? "border-black bg-black text-white"
+                    : "border-neutral-200 hover:border-neutral-400"
+                }`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
           <Input
             label="Reason"
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="e.g. Missing vendor name"
+            placeholder="Or type a custom reason…"
             minLength={3}
           />
           <div className="flex gap-2">

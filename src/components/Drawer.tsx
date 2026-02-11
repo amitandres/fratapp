@@ -7,11 +7,13 @@ export function Drawer({
   onClose,
   title,
   children,
+  className = "",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   useEffect(() => {
     if (open) {
@@ -27,7 +29,7 @@ export function Drawer({
   if (!open) return null;
 
   return (
-    <>
+    <div className={className}>
       <div
         className="fixed inset-0 z-40 bg-black/50"
         onClick={onClose}
@@ -53,6 +55,6 @@ export function Drawer({
         </div>
         <div className="p-4">{children}</div>
       </div>
-    </>
+    </div>
   );
 }

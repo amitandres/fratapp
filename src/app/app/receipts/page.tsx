@@ -28,8 +28,13 @@ export default async function ReceiptsPage({
       ...(!canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin") ? { user_id: session.userId } : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
     },
-    include:
-      canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin")
+    include: {
+      rejected_by_user: {
+        include: {
+          profile: { select: { first_name: true, last_name: true } },
+        },
+      },
+      ...(canViewAllReceipts(session.role as "member" | "treasurer" | "exec" | "admin")
         ? {
             user: {
               include: {
@@ -44,7 +49,8 @@ export default async function ReceiptsPage({
               },
             },
           }
-        : undefined,
+        : {}),
+    },
     orderBy: { created_at: "desc" },
   });
 

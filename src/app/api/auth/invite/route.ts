@@ -41,5 +41,6 @@ export async function GET(request: Request) {
     orgName: invite.organization.name,
     role: invite.role,
     orgId: invite.org_id,
+    usesRemaining: invite.max_uses - invite.uses,
   });
 }
